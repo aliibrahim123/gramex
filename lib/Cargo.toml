@@ -1,0 +1,12 @@
+[package]
+name = "gramex"
+description = "common language for advance parsers"
+edition = "2024"
+version = "0.1.0"
+readme = "../readme.md"
+license = "MIT"
+repository = "https://github.com/aliibrahim123/gramex"
+documentation = "https://docs.rs/gramex/"
+
+[dependencies]
+gramex-macro = { version = "0.1.0", path = "../macro" }
