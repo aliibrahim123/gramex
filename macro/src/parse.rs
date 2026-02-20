@@ -1,12 +1,10 @@
-use std::u32;
-
-use proc_macro2::{Delimiter, Punct, Span};
+use proc_macro2::{Delimiter, Span};
 use syn::{
 	Block, Error, Ident, Lit, LitInt, Token, Type, bracketed, parenthesized,
 	parse::{ParseBuffer, discouraged::Speculative},
 	punctuated::Punctuated,
 	spanned::Spanned,
-	token::{Brace, Paren, Token},
+	token::{Brace, Paren},
 };
 
 type Path = Punctuated<Ident, Token![::]>;
@@ -133,7 +131,7 @@ fn parse_unit(buf: &ParseBuffer) -> syn::Result<Expr> {
 			buf.parse::<Token![<]>()?;
 
 			let args = Punctuated::<_, Token![,]>::parse_separated_nonempty_with(buf, |buf| {
-				parse_expr(buf, 0)
+				parse_expr(buf)
 			})?;
 			let args = args.into_iter().collect();
 
@@ -154,7 +152,7 @@ fn parse_unit(buf: &ParseBuffer) -> syn::Result<Expr> {
 		if let Some(expr) = try_parse_capture(&expr, flag_span)? {
 			return Ok(expr);
 		}
-		Atom::Group(Box::new(parse_expr(&expr, 0)?))
+		Atom::Group(Box::new(parse_expr(&expr)?))
 	} else {
 		return Err(buf.error("expected atom"));
 	};
@@ -188,7 +186,7 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 	}
 
 	buf.parse::<Token![=]>()?;
-	let expr = Box::new(parse_expr(buf, 0)?);
+	let expr = Box::new(parse_expr(buf)?);
 
 	Ok(Some(Expr::Capture { ident, rep, ty, conv, typeid: 0, expr }))
 }
@@ -229,9 +227,12 @@ fn parse_expr_range(buf: &ParseBuffer) -> syn::Result<Expr> {
 	Ok(lh)
 }
 
+fn expr_end(buf: &ParseBuffer) -> bool {
+	buf.peek(Token![,]) || buf.peek(Token![;]) || buf.peek(Token![>]) || buf.is_empty()
+}
 fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
-	let mut expr = parse_expr_range(buf)?;
-	if buf.peek(Token![|]) || buf.peek(Token![,]) || buf.peek(Token![;]) || buf.is_empty() {
+	let expr = parse_expr_range(buf)?;
+	if buf.peek(Token![|]) || expr_end(buf) {
 		return Ok(expr);
 	}
 	if !buf.peek(Token![&]) {
@@ -244,20 +245,20 @@ fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
 	Ok(Expr::And(exprs))
 }
 fn parse_expr_seq(buf: &ParseBuffer) -> syn::Result<Expr> {
-	let mut expr = parse_expr_and(buf)?;
-	if buf.peek(Token![|]) || buf.peek(Token![,]) || buf.peek(Token![;]) || buf.is_empty() {
+	let expr = parse_expr_and(buf)?;
+	if buf.peek(Token![|]) || expr_end(buf) {
 		return Ok(expr);
 	}
 	let mut exprs = vec![expr];
-	while !(buf.peek(Token![|]) || buf.peek(Token![,]) || buf.peek(Token![;]) || buf.is_empty()) {
+	while !(buf.peek(Token![|]) || expr_end(buf)) {
 		exprs.push(parse_expr_and(buf)?);
 	}
 	Ok(Expr::Seq(exprs))
 }
 
-pub fn parse_expr(buf: &ParseBuffer, min_bp: u8) -> syn::Result<Expr> {
-	let mut expr = parse_expr_seq(buf)?;
-	if buf.peek(Token![&]) || buf.peek(Token![,]) || buf.peek(Token![;]) || buf.is_empty() {
+pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
+	let expr = parse_expr_seq(buf)?;
+	if buf.peek(Token![&]) || expr_end(buf) {
 		return Ok(expr);
 	}
 	if !buf.peek(Token![|]) {
@@ -271,6 +272,7 @@ pub fn parse_expr(buf: &ParseBuffer, min_bp: u8) -> syn::Result<Expr> {
 }
 
 /// **grammer**: `"let" ident (args? = '<' list<ident, ','> '>') (':' (ty = path) (conv? = block))? = expr`
+#[derive(Debug, Clone, PartialEq)]
 pub struct Term {
 	pub name: Ident,
 	pub args: Vec<Ident>,
@@ -278,6 +280,7 @@ pub struct Term {
 	pub conv: Option<Block>,
 	pub expr: Expr,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct GramexMacro {
 	pub mod_name: Option<Ident>,
 	pub matched_type: Type,
@@ -312,12 +315,12 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 		}
 
 		buf.parse::<Token![=]>()?;
-		let expr = parse_expr(buf, 0)?;
+		let expr = parse_expr(buf)?;
 		buf.parse::<Token![;]>()?;
 		terms.push(Term { name, args, ty, conv, expr });
 	}
 
-	let root_expr = parse_expr(buf, 0)?;
+	let root_expr = parse_expr(buf)?;
 
 	Ok(GramexMacro { mod_name, matched_type, terms, root_expr })
 }
