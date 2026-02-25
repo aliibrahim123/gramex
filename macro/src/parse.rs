@@ -1,4 +1,6 @@
-use proc_macro2::{Delimiter, Span};
+use std::cell::Cell;
+
+use proc_macro2::{Delimiter, Span, TokenStream};
 use syn::{
 	Block, Error, Ident, Lit, LitInt, Token, Type, bracketed, parenthesized,
 	parse::{ParseBuffer, discouraged::Speculative},
@@ -9,7 +11,7 @@ use syn::{
 
 type Path = Punctuated<Ident, Token![::]>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 /// repetition specifiers
 ///
 /// `'[' (min? = nb) ".." (max? = nb) ']'`
@@ -63,7 +65,7 @@ pub enum Expr {
 		rep: Repetition,
 		ty: Option<Box<Type>>,
 		conv: Option<Box<Block>>,
-		typeid: u32,
+		typeid: Cell<u32>,
 		expr: Box<Expr>,
 	},
 	/// sequence of expressions
@@ -188,11 +190,11 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 	buf.parse::<Token![=]>()?;
 	let expr = Box::new(parse_expr(buf)?);
 
-	Ok(Some(Expr::Capture { ident, rep, ty, conv, typeid: 0, expr }))
+	Ok(Some(Expr::Capture { ident, rep, ty, conv, typeid: Cell::new(0), expr }))
 }
 
 fn is_simple_unit(unit: &Expr) -> bool {
-	let Expr::Unit { not, near, repetition, atom } = unit else {
+	let Expr::Unit { not, near, repetition, atom, .. } = unit else {
 		return false;
 	};
 	if not | near || *repetition != Repetition::Once {
@@ -272,20 +274,18 @@ pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
 }
 
 /// **grammer**: `"let" ident (args? = '<' list<ident, ','> '>') (':' (ty = path) (conv? = block))? = expr`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Term {
 	pub name: Ident,
 	pub args: Vec<Ident>,
-	pub ty: Option<Type>,
-	pub conv: Option<Block>,
+	pub resolved: TokenStream,
 	pub expr: Expr,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct GramexMacro {
 	pub mod_name: Option<Ident>,
 	pub matched_type: Type,
 	pub terms: Vec<Term>,
-	pub root_expr: Expr,
 }
 pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 	try_parse!(buf, Token![pub]);
@@ -308,19 +308,23 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 
 		let (mut ty, mut conv) = (None, None);
 		if try_parse!(buf, Token![:]) {
-			ty = Some(buf.parse::<Type>()?);
+			ty = Some(Box::new(buf.parse::<Type>()?));
 			if buf.peek(Brace) {
-				conv = Some(buf.parse::<Block>()?);
+				conv = Some(Box::new(buf.parse::<Block>()?));
 			}
 		}
 
 		buf.parse::<Token![=]>()?;
-		let expr = parse_expr(buf)?;
+		let expr = Box::new(parse_expr(buf)?);
+		#[rustfmt::skip]
+		let expr = Expr::Capture {
+			ident: name.clone(), rep: Repetition::Once, ty, conv, typeid: Cell::new(0), expr,
+		};
 		buf.parse::<Token![;]>()?;
-		terms.push(Term { name, args, ty, conv, expr });
+		terms.push(Term { name, args, expr, resolved: TokenStream::new() });
 	}
 
 	let root_expr = parse_expr(buf)?;
 
-	Ok(GramexMacro { mod_name, matched_type, terms, root_expr })
+	Ok(GramexMacro { mod_name, matched_type, terms })
 }

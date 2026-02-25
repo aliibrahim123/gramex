@@ -1,3 +1,4 @@
+mod gen_types;
 mod parse;
 
 use proc_macro::TokenStream;
