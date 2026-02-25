@@ -324,7 +324,5 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 		terms.push(Term { name, args, expr, resolved: TokenStream::new() });
 	}
 
-	let root_expr = parse_expr(buf)?;
-
 	Ok(GramexMacro { mod_name, matched_type, terms })
 }
