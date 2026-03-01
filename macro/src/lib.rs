@@ -1,3 +1,4 @@
+mod gen_matcher;
 mod gen_types;
 mod parse;
 

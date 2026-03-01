@@ -15,7 +15,7 @@ type Path = Punctuated<Ident, Token![::]>;
 /// repetition specifiers
 ///
 /// `'[' (min? = nb) ".." (max? = nb) ']'`
-pub struct Repetition(u32, u32);
+pub struct Repetition(pub u32, pub u32);
 impl Repetition {
 	/// normal
 	pub const Once: Self = Self(1, 1);
@@ -59,7 +59,7 @@ pub enum Expr {
 	Range(Box<Atom>, Atom),
 	/// `(ident: Ident = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_')`
 	///
-	/// `'(' ident rep? (':' (ty = path) (conv? = block)? = expr ')'`
+	/// `'(' ident rep? (':' (ty = path))? = expr ("=>" (conv = block))? ')'`
 	Capture {
 		ident: Ident,
 		rep: Repetition,
@@ -104,6 +104,9 @@ fn parse_repetition(buf: &ParseBuffer) -> syn::Result<Repetition> {
 		bracketed!(range in buf);
 
 		let min = if range.peek(LitInt) { range.parse::<LitInt>()?.base10_parse()? } else { 0 };
+		if range.is_empty() {
+			return Ok(Repetition(min, min));
+		}
 		range.parse::<Token![..]>()?;
 		let max =
 			if range.peek(LitInt) { range.parse::<LitInt>()?.base10_parse()? } else { u32::MAX };
@@ -179,16 +182,18 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 		return Err(Error::new(span, "capture can not have flags"));
 	}
 
-	let (mut ty, mut conv) = (None, None);
+	let mut ty = None;
 	if try_parse!(buf, Token![:]) {
 		ty = Some(Box::new(buf.parse::<Type>()?));
-		if buf.peek(Brace) {
-			conv = Some(Box::new(buf.parse::<Block>()?));
-		}
 	}
 
 	buf.parse::<Token![=]>()?;
 	let expr = Box::new(parse_expr(buf)?);
+
+	let mut conv = None;
+	if try_parse!(buf, Token![=>]) {
+		conv = Some(Box::new(buf.parse::<Block>()?));
+	}
 
 	Ok(Some(Expr::Capture { ident, rep, ty, conv, typeid: Cell::new(0), expr }))
 }
@@ -230,7 +235,8 @@ fn parse_expr_range(buf: &ParseBuffer) -> syn::Result<Expr> {
 }
 
 fn expr_end(buf: &ParseBuffer) -> bool {
-	buf.peek(Token![,]) || buf.peek(Token![;]) || buf.peek(Token![>]) || buf.is_empty()
+	let is_comm = buf.peek(Token![,]);
+	is_comm || buf.peek(Token![;]) || buf.peek(Token![>]) || buf.peek(Token![=]) || buf.is_empty()
 }
 fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let expr = parse_expr_range(buf)?;
@@ -273,7 +279,7 @@ pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
 	Ok(Expr::Or(exprs))
 }
 
-/// **grammer**: `"let" ident (args? = '<' list<ident, ','> '>') (':' (ty = path) (conv? = block))? = expr`
+/// **grammer**: `"let" ident ('<' (args = list<ident, ','>) '>')? (':' (ty = path))? = expr ("=>" (conv = block))?`
 #[derive(Debug, Clone)]
 pub struct Term {
 	pub name: Ident,
@@ -306,16 +312,19 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 			buf.parse::<Token![>]>()?;
 		}
 
-		let (mut ty, mut conv) = (None, None);
+		let mut ty = None;
 		if try_parse!(buf, Token![:]) {
 			ty = Some(Box::new(buf.parse::<Type>()?));
-			if buf.peek(Brace) {
-				conv = Some(Box::new(buf.parse::<Block>()?));
-			}
 		}
 
 		buf.parse::<Token![=]>()?;
 		let expr = Box::new(parse_expr(buf)?);
+
+		let mut conv = None;
+		if try_parse!(buf, Token![=>]) {
+			conv = Some(Box::new(buf.parse::<Block>()?));
+		}
+
 		#[rustfmt::skip]
 		let expr = Expr::Capture {
 			ident: name.clone(), rep: Repetition::Once, ty, conv, typeid: Cell::new(0), expr,
