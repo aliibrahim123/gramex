@@ -3,24 +3,28 @@ mod gen_types;
 mod parse;
 
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{TokenStreamExt, format_ident, quote};
 use syn::{Pat, parse_macro_input};
 
-use crate::{gen_types::resolve_types_macro, parse::parse_gramex_macro};
+use crate::{
+	gen_matcher::{Ctx, gen_term},
+	gen_types::resolve_types_macro,
+	parse::parse_gramex_macro,
+};
 
 #[proc_macro]
-pub fn make(input: TokenStream) -> TokenStream {
-	let input = parse_macro_input!(input with Pat::parse_multi);
-	let res = quote! {
-		pub fn example (inp: i64) -> bool {
-			matches!(inp, #input)
-		}
-	};
-	res.into()
-}
+pub fn gramex(input: TokenStream) -> TokenStream {
+	let mut module = parse_macro_input!(input with parse_gramex_macro);
+	let mut mod_def = resolve_types_macro(&mut module).unwrap_or_else(|e| e.to_compile_error());
 
-#[proc_macro]
-pub fn test_a(input: TokenStream) -> TokenStream {
-	let mut input = parse_macro_input!(input with parse_gramex_macro);
-	resolve_types_macro(&mut input).unwrap_or_else(|e| e.to_compile_error()).into()
+	for term in &module.terms {
+		let captures_mod = &format_ident!("{}_captures", term.name);
+		mod_def.append_all(gen_term(term, &module.matched_type, &Ctx { captures_mod }));
+	}
+
+	match module.mod_name {
+		Some(name) => quote! { mod #name { use super::*; #mod_def } },
+		None => mod_def,
+	}
+	.into()
 }

@@ -1,15 +1,18 @@
+mod test;
 use std::{
 	marker::PhantomData,
 	ops::{Deref, Range},
 };
 
 pub trait MatchAble {
+	fn len(&self) -> usize;
 	fn slice(&self, range: Range<usize>) -> &Self;
 }
 pub enum MatchSignal {
 	Matched,
 	MisMatched,
 	InComplete,
+	Excess,
 	Other(String),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,9 +22,7 @@ pub struct MatchStatus {
 pub trait MatchBy<T> {
 	fn match_by(&self, matcher: T, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
 }
-pub trait Matcher<T: MatchAble + ?Sized> {
-	fn try_match(self, matchable: &T, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
-}
+pub trait Matcher<T: MatchAble + ?Sized>: Fn(&T, &mut usize, &MatchStatus) -> MatchSignal {}
 pub struct MatchError {
 	pub msg: String,
 	pub ind: usize,

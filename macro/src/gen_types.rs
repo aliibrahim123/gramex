@@ -9,6 +9,10 @@ use crate::{
 	parse::{self, Atom, Expr, GramexMacro, Term},
 };
 
+fn default<T: Default>() -> T {
+	T::default()
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Repetition {
 	Once,
@@ -20,8 +24,7 @@ enum CaptureNodeKind<'a> {
 	Normal,
 	Group(Vec<CaptureNode<'a>>),
 	Term(TokenStream),
-	Enum(Vec<CaptureNode<'a>>),
-	EnumWithNone(Vec<CaptureNode<'a>>),
+	Enum { with_none: bool, nodes: Vec<CaptureNode<'a>> },
 }
 #[derive(Debug, Clone)]
 struct CaptureNode<'a> {
@@ -33,7 +36,7 @@ struct CaptureNode<'a> {
 #[derive(Debug, Clone)]
 enum CapTree<'a> {
 	Capture(CaptureNode<'a>),
-	Enum { has_none: bool, nodes: Vec<CaptureNode<'a>> },
+	Enum { with_none: bool, nodes: Vec<CaptureNode<'a>> },
 	Group(Vec<CaptureNode<'a>>),
 }
 
@@ -78,7 +81,7 @@ fn transform<'a>(expr: &'a Expr, terms: &'a Vec<Term>) -> syn::Result<Option<Cap
 			let nodes = map_child(exprs, terms)?;
 			match nodes.is_empty() {
 				true => None,
-				false => Some(Enum { has_none: exprs.len() != nodes.len(), nodes }),
+				false => Some(Enum { with_none: exprs.len() != nodes.len(), nodes }),
 			}
 		}
 		cap @ Expr::Capture { rep, expr, .. } => {
@@ -91,8 +94,7 @@ fn transform<'a>(expr: &'a Expr, terms: &'a Vec<Term>) -> syn::Result<Option<Cap
 			type Kind<'a> = CaptureNodeKind<'a>;
 			let ty = match nodes {
 				Some(Group(nodes)) => Kind::Group(nodes),
-				Some(Enum { has_none: false, nodes }) => Kind::Enum(nodes),
-				Some(Enum { has_none: true, nodes }) => Kind::EnumWithNone(nodes),
+				Some(Enum { with_none, nodes }) => Kind::Enum { with_none, nodes },
 				Some(Capture(node)) => Kind::Group(vec![node]),
 				None => test_capture_term(expr, terms),
 			};
@@ -141,27 +143,26 @@ fn find_unallowed_capture(expr: &Expr) -> syn::Result<()> {
 	Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub enum CaptureKind {
-	Group,
-	Term,
-	Enum,
-	EnumWithNone,
+	#[default]
+	Normal,
+	Term(TokenStream),
+	Group(Vec<String>),
+	Enum {
+		with_none: bool,
+	},
 }
-#[derive(Debug)]
-pub struct Type {
-	pub id: u32,
-	pub name: Ident,
+#[derive(Debug, Clone, Default)]
+pub struct CaptureInfo {
+	pub type_name: Option<Ident>,
 	pub kind: CaptureKind,
 	pub enum_type: Option<String>,
-	pub fields: Vec<String>,
 }
-#[derive(Default)]
 struct ResolveResult {
 	pub resolved: TokenStream,
-	pub name: Option<Ident>,
 	pub has_map: bool,
-	pub ty: Option<Type>,
+	pub cap: CaptureInfo,
 }
 
 fn write_rep(ty: impl ToTokens, rep: Repetition) -> TokenStream {
@@ -172,11 +173,10 @@ fn write_rep(ty: impl ToTokens, rep: Repetition) -> TokenStream {
 	}
 }
 fn resolve_capture(
-	node: &CaptureNode, matched_type: &syn::Type, type_defs: &mut TokenStream,
-	id_counter: &mut u32, types: &mut HashMap<u32, Type>,
+	node: &CaptureNode, matched_type: &syn::Type, cap_defs: &mut TokenStream, id_counter: &mut u64,
 ) -> ResolveResult {
 	let CaptureNode { expr, kind, rep } = node;
-	let Expr::Capture { ty, typeid, .. } = expr else { unreachable!() };
+	let Expr::Capture { ty, type_info, .. } = expr else { unreachable!() };
 
 	use CaptureNodeKind::*;
 	if matches!(kind, Normal | Term(_)) {
@@ -185,12 +185,13 @@ fn resolve_capture(
 		} else {
 			if let Term(res) = kind { write_rep(res, *rep) } else { write_rep(matched_type, *rep) }
 		};
-		return ResolveResult { resolved, ..Default::default() };
+		let kind =
+			if let Term(res) = kind { CaptureKind::Term(res.clone()) } else { CaptureKind::Normal };
+		return ResolveResult { resolved, has_map: false, cap: CaptureInfo { kind, ..default() } };
 	}
 
 	let id = *id_counter;
 	*id_counter += 1;
-	typeid.replace(id);
 	let name = format_ident!("Cap{id}");
 	let resolved = if let Some(ty) = ty {
 		write_rep(ty.as_ref(), *rep)
@@ -200,27 +201,25 @@ fn resolve_capture(
 
 	let mut map_def = TokenStream::new();
 	let mut loop_children =
-		|nodes, looper: &mut dyn FnMut(&syn::Ident, TokenStream, &mut Option<Type>)| {
+		|nodes, looper: &mut dyn FnMut(&syn::Ident, TokenStream, &mut CaptureInfo)| {
 			for node in nodes {
-				let ResolveResult { resolved, name, mut ty, has_map } =
-					resolve_capture(node, matched_type, type_defs, id_counter, types);
+				let ResolveResult { resolved, mut cap, has_map } =
+					resolve_capture(node, matched_type, cap_defs, id_counter);
 				let Expr::Capture { ident, .. } = node.expr else { unreachable!() };
-				looper(ident, resolved, &mut ty);
-				if let Some(ty) = ty {
-					types.insert(ty.id, ty);
-				}
-				if let Some(resolved) = name {
+				looper(ident, resolved, &mut cap);
+				if let Some(type_name) = &cap.type_name {
 					let types = format_ident!("{ident}_types");
-					let types_mod = format_ident!("{resolved}_types");
-					map_def.append_all(quote! { pub type #ident<'a> = #resolved<'a>; });
+					let types_mod = format_ident!("{type_name}_types");
+					map_def.append_all(quote! { pub type #ident<'a> = #type_name<'a>; });
 					if has_map {
 						map_def.append_all(quote! {pub use super::#types_mod as #types;});
 					}
 				}
+				type_info.replace(cap);
 			}
 		};
 
-	let (kind, fields) = match kind {
+	let kind = match kind {
 		Group(nodes) => {
 			let mut fields = vec![];
 			let mut fields_def = TokenStream::new();
@@ -228,35 +227,33 @@ fn resolve_capture(
 				fields.push(ident.to_string());
 				fields_def.append_all(quote! {pub #ident: #resolved,});
 			});
-			type_defs.append_all(quote! {pub struct #name<'a> {
+			cap_defs.append_all(quote! {pub struct #name<'a> {
 				pub matched: #matched_type, #fields_def
-				#[doc(hidden)]
-				pub __life_marker: std::marker::PhantomData<&'a ()>
+				#[doc(hidden)] pub __life_marker: std::marker::PhantomData<&'a ()>
 			}});
-			(CaptureKind::Group, fields)
+			CaptureKind::Group(fields)
 		}
-		Enum(nodes) | EnumWithNone(nodes) => {
-			let with_none = matches!(kind, EnumWithNone(_));
+		Enum { with_none, nodes } => {
 			let mut var_def = TokenStream::new();
-			loop_children(nodes, &mut |ident, resolved, ty| {
+			loop_children(nodes, &mut |ident, resolved, cap| {
 				var_def.append_all(quote! {#ident(#resolved),});
-				if let Some(ty) = ty {
-					ty.enum_type = Some(name.to_string());
-				};
+				cap.enum_type = Some(name.to_string());
 			});
 			let none = with_none.then(|| quote! {None,});
-			type_defs.append_all(quote! {pub enum #name<'a> {#none #var_def}});
-			let kind = if with_none { CaptureKind::EnumWithNone } else { CaptureKind::Enum };
-			(kind, vec![])
+			cap_defs.append_all(quote! { pub enum #name<'a> {
+				#none #var_def
+				#[doc(hidden)] __life_marker(std::convert::Infallible, std::marker::PhantomData<&'a ()>)
+			} });
+			CaptureKind::Enum { with_none: *with_none }
 		}
 		_ => unreachable!(),
 	};
 	if !map_def.is_empty() {
 		let name = format_ident!("Cap{id}_types");
-		type_defs.append_all(quote! {pub mod #name {use super::*; #map_def}});
+		cap_defs.append_all(quote! {pub mod #name {use super::*; #map_def}});
 	};
-	let ty = Type { kind, id, name: name.clone(), fields, enum_type: None };
-	ResolveResult { resolved, ty: Some(ty), name: Some(name), has_map: !map_def.is_empty() }
+	let cap = CaptureInfo { kind, type_name: Some(name), ..default() };
+	ResolveResult { resolved, cap, has_map: !map_def.is_empty() }
 }
 
 pub struct ResolveExprResult {
@@ -264,50 +261,48 @@ pub struct ResolveExprResult {
 	pub root_type: TokenStream,
 }
 fn resolve_types(
-	expr: &Expr, mod_name: &Ident, matched_type: &syn::Type, id_counter: &mut u32,
-	types: &mut HashMap<u32, Type>, terms: &Vec<Term>,
+	expr: &Expr, mod_name: &Ident, matched_type: &syn::Type, id_counter: &mut u64,
+	terms: &Vec<Term>,
 ) -> syn::Result<ResolveExprResult> {
 	let Some(CapTree::Capture(root)) = transform(&expr, &terms)? else { unreachable!() };
+	let Expr::Capture { type_info, .. } = root.expr else { unreachable!() };
 	let mut type_defs = TokenStream::new();
 
-	let ResolveResult { ty, resolved, name, has_map, .. } =
-		resolve_capture(&root, &matched_type, &mut type_defs, id_counter, types);
+	let ResolveResult { cap, resolved, has_map, .. } =
+		resolve_capture(&root, &matched_type, &mut type_defs, id_counter);
 
-	let Some(ty) = ty else {
+	let Some(type_name) = &cap.type_name else {
 		return Ok(ResolveExprResult { mod_def: TokenStream::new(), root_type: resolved });
 	};
-	types.insert(ty.id, ty);
 
-	type_defs.append_all(quote! {pub type Root<'a> = #name<'a>;});
+	type_defs.append_all(quote! {pub type Root<'a> = #type_name<'a>;});
 	if has_map {
-		let types = format_ident!("{}_types", name.unwrap());
+		let types = format_ident!("{}_types", type_name);
 		type_defs.append_all(quote! {pub use #types as root_types;});
 	}
 	let mod_def = quote! {pub mod #mod_name {#type_defs}};
+	type_info.replace(cap);
 	Ok(ResolveExprResult { mod_def, root_type: resolved })
 }
 
 pub fn resolve_types_expr(
 	expr: &Expr, matched_type: &syn::Type, mod_name: &Ident,
 ) -> syn::Result<TokenStream> {
-	let mut types = HashMap::new();
 	let mut id_counter = 0;
 	let ResolveExprResult { mod_def, .. } =
-		resolve_types(expr, mod_name, matched_type, &mut id_counter, &mut types, &vec![])?;
+		resolve_types(expr, mod_name, matched_type, &mut id_counter, &vec![])?;
 	Ok(mod_def)
 }
 pub fn resolve_types_macro(modu: &mut GramexMacro) -> syn::Result<TokenStream> {
 	let GramexMacro { matched_type, .. } = modu;
 	let mut mod_defs = TokenStream::new();
-	let mut types = HashMap::new();
 	let mut resolved_types = vec![];
-	let mut id_counter = 0;
+	let mut id_counter = 1;
 
 	for term in &modu.terms {
 		let name = &format_ident!("{}_captures", term.name);
-		let terms = &modu.terms;
 		let ResolveExprResult { mod_def, root_type } =
-			resolve_types(&term.expr, name, matched_type, &mut id_counter, &mut types, terms)?;
+			resolve_types(&term.expr, name, matched_type, &mut id_counter, &modu.terms)?;
 		resolved_types.push(root_type);
 		mod_defs.append_all(mod_def);
 	}

@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use proc_macro2::{Delimiter, Span, TokenStream};
 use syn::{
@@ -8,6 +8,8 @@ use syn::{
 	spanned::Spanned,
 	token::{Brace, Paren},
 };
+
+use crate::gen_types::CaptureInfo;
 
 type Path = Punctuated<Ident, Token![::]>;
 
@@ -27,7 +29,7 @@ impl Repetition {
 	pub const Plus1: Self = Self(1, u32::MAX);
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 /// a signle mathcer
 pub enum Atom {
 	/// `1 | "a"`, **grammer**: rust ident
@@ -46,7 +48,7 @@ pub enum Atom {
 	Block(Box<Block>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 /// the grammer unit
 pub enum Expr {
 	/// atom with modifiers
@@ -65,7 +67,7 @@ pub enum Expr {
 		rep: Repetition,
 		ty: Option<Box<Type>>,
 		conv: Option<Box<Block>>,
-		typeid: Cell<u32>,
+		type_info: Box<RefCell<CaptureInfo>>,
 		expr: Box<Expr>,
 	},
 	/// sequence of expressions
@@ -195,7 +197,7 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 		conv = Some(Box::new(buf.parse::<Block>()?));
 	}
 
-	Ok(Some(Expr::Capture { ident, rep, ty, conv, typeid: Cell::new(0), expr }))
+	Ok(Some(Expr::Capture { ident, rep, ty, conv, type_info: Box::default(), expr }))
 }
 
 fn is_simple_unit(unit: &Expr) -> bool {
@@ -325,9 +327,10 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 			conv = Some(Box::new(buf.parse::<Block>()?));
 		}
 
+		let cap_ident = Ident::new("root", name.span());
 		#[rustfmt::skip]
 		let expr = Expr::Capture {
-			ident: name.clone(), rep: Repetition::Once, ty, conv, typeid: Cell::new(0), expr,
+			ident: cap_ident, rep: Repetition::Once, ty, conv, type_info: Box::default(), expr,
 		};
 		buf.parse::<Token![;]>()?;
 		terms.push(Term { name, args, expr, resolved: TokenStream::new() });
