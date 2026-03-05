@@ -2,7 +2,8 @@ use std::cell::{Cell, RefCell};
 
 use proc_macro2::{Delimiter, Span, TokenStream};
 use syn::{
-	Block, Error, Ident, Lit, LitInt, Token, Type, bracketed, parenthesized,
+	Block, Error, Ident, ItemUse, Lit, LitInt, Token, Type, UseTree, Visibility, bracketed,
+	parenthesized,
 	parse::{ParseBuffer, discouraged::Speculative},
 	punctuated::Punctuated,
 	spanned::Spanned,
@@ -291,15 +292,30 @@ pub struct Term {
 }
 #[derive(Debug, Clone)]
 pub struct GramexMacro {
+	pub mod_vis: Visibility,
 	pub mod_name: Option<Ident>,
+	pub use_decls: Vec<ItemUse>,
 	pub matched_type: Type,
 	pub terms: Vec<Term>,
 }
 pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
+	let mod_vis = buf.parse::<Visibility>()?;
 	try_parse!(buf, Token![pub]);
 	let mod_name = if try_parse!(buf, Token![mod]) { Some(buf.parse()?) } else { None };
+	if mod_vis != Visibility::Inherited && mod_name.is_none() {
+		return Err(Error::new(mod_vis.span(), "visibility without module specifier"));
+	}
 	buf.parse::<Token![for]>()?;
 	let matched_type = buf.parse()?;
+	buf.parse::<Token![;]>()?;
+
+	let mut use_decls = Vec::new();
+	while buf.peek(Token![use]) {
+		use_decls.push(buf.parse::<ItemUse>()?);
+	}
+	if !use_decls.is_empty() && mod_name.is_none() {
+		return Err(Error::new(use_decls[0].span(), "use decleration without module specifier"));
+	}
 
 	let mut terms = Vec::new();
 	while buf.peek(Token![let]) {
@@ -336,5 +352,5 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 		terms.push(Term { name, args, expr, resolved: TokenStream::new() });
 	}
 
-	Ok(GramexMacro { mod_name, matched_type, terms })
+	Ok(GramexMacro { mod_vis, mod_name, use_decls, matched_type, terms })
 }
