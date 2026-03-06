@@ -1,87 +1,88 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 
-use proc_macro2::{Delimiter, Span, TokenStream};
+use proc_macro2::{Span, TokenStream};
 use syn::{
-	Block, Error, Ident, ItemUse, Lit, LitInt, Token, Type, UseTree, Visibility, bracketed,
+	Block, Error, Ident, ItemUse, Lit, LitInt, Path, Token, Type, Visibility, bracketed,
 	parenthesized,
 	parse::{ParseBuffer, discouraged::Speculative},
 	punctuated::Punctuated,
 	spanned::Spanned,
-	token::{Brace, Paren},
+	token::{Brace, Bracket, Paren},
 };
 
 use crate::gen_types::CaptureInfo;
 
-type Path = Punctuated<Ident, Token![::]>;
-
 #[derive(Debug, Clone, PartialEq, Copy)]
 /// repetition specifiers
 ///
-/// `'[' (min? = nb) ".." (max? = nb) ']'`
+/// **grammer**: `'?' | '*' | '+' | '[' (exact = nb) ']' | '[' (min? = nb) ".." (max? = nb) ']'`
 pub struct Repetition(pub u32, pub u32);
 impl Repetition {
-	/// normal
-	pub const Once: Self = Self(1, 1);
-	/// `?`
-	pub const Optional: Self = Self(0, 1);
-	/// `*`
-	pub const ManyOpt: Self = Self(0, u32::MAX);
-	/// `+`
-	pub const Plus1: Self = Self(1, u32::MAX);
+	/// no repetition
+	pub const ONCE: Self = Self(1, 1);
+	/// optional: `?`
+	pub const OPTIONAL: Self = Self(0, 1);
+	/// more than 0: `*`
+	pub const MANY_OPT: Self = Self(0, u32::MAX);
+	/// more than 1: `+`
+	pub const PLUS1: Self = Self(1, u32::MAX);
 }
 
 #[derive(Debug, Clone)]
-/// a signle mathcer
+/// a single mathcer
 pub enum Atom {
-	/// `1 | "a"`, **grammer**: rust ident
+	/// literals: `1 | "a"`
 	Literal(Lit),
-	/// `example::dg`, **grammer**: rust path
-	Term(Path),
-	/// `_`
+	/// path to mathchers: "example::matcher"
+	Path(Box<Path>),
+	/// match any iterm: **grammer**: `_`
 	Any,
-	/// `(exp1 exp2)`, **grammer**: '(' expr ')'
+	/// enclosed expression: `(exp1 exp2)`,
+	///
+	/// **grammer**: '(' expr ')'
 	Group(Box<Expr>),
-	/// `list<dg, ','>`
+	/// call a compound matcher by a set of matchers: `list<dg, ','>`
 	///
 	/// **grammer**: `path '<' (args = list<expr, ','>) '>'`
 	Call { path: Box<Path>, args: Box<[Expr]> },
-	/// `{ |inp| custom_matcher(inp) }`, **grammer**: rust block
+	/// rust block that resolve to a matcher `{ if expr { matcher1 } else { matcher2 } }`
 	Block(Box<Block>),
 }
 
 #[derive(Debug, Clone)]
 /// the grammer unit
 pub enum Expr {
-	/// atom with modifiers
+	/// atom with modifiers: `!'a'[3]`
 	///
-	/// **grammer**: `(flags = '!'? '~'?) atom rep?`
+	/// **grammer**: `(not? = '!') (near? = '~') atom rep?`
 	Unit { not: bool, near: bool, repetition: Repetition, atom: Atom },
-	/// `'a'..'z'`
+	/// range matcher: `'a'..'z'`
 	///
-	/// `atom ".." atom`
+	/// **grammer**: `atom ".." atom`
 	Range(Box<Atom>, Atom),
-	/// `(ident: Ident = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_')`
+	/// capture the matched section:  `(ident: Ident = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_')`
 	///
 	/// `'(' ident rep? (':' (ty = path))? = expr ("=>" (conv = block))? ')'`
 	Capture {
 		ident: Ident,
 		rep: Repetition,
 		ty: Option<Box<Type>>,
+		/// a block that transform the capture
 		conv: Option<Box<Block>>,
 		type_info: Box<RefCell<CaptureInfo>>,
 		expr: Box<Expr>,
 	},
-	/// sequence of expressions
+	/// sequence of expressions: `'a' 'b' 'c'`
 	///
-	/// `exp1 exp2 exp3`
+	/// **grammer**:`expr+`
 	Seq(Vec<Expr>),
-	/// match any of expressions
+	/// match any of expressions: `'a' | 'b' | 'c'`
 	///
-	/// `exp1 | exp2 | exp3`
+	/// **grammer**: `list<expr, '|'>`
 	Or(Vec<Expr>),
-	/// match all of the expressions
+	/// match all of the expressions: `('a'..'z')[3] & !'a'[3]`
 	///
-	/// `exp1 & exp2 & exp3`
+	/// **grammer**: `list<expr, '&'>`
 	And(Vec<Expr>),
 }
 
@@ -97,19 +98,22 @@ macro_rules! try_parse {
 
 fn parse_repetition(buf: &ParseBuffer) -> syn::Result<Repetition> {
 	if try_parse!(buf, Token![?]) {
-		Ok(Repetition::Optional)
+		Ok(Repetition::OPTIONAL)
 	} else if try_parse!(buf, Token![*]) {
-		Ok(Repetition::ManyOpt)
+		Ok(Repetition::MANY_OPT)
 	} else if try_parse!(buf, Token![+]) {
-		Ok(Repetition::Plus1)
-	} else if buf.cursor().group(Delimiter::Bracket).is_some() {
+		Ok(Repetition::PLUS1)
+	} else if buf.peek(Bracket) {
 		let range;
 		bracketed!(range in buf);
 
 		let min = if range.peek(LitInt) { range.parse::<LitInt>()?.base10_parse()? } else { 0 };
-		if range.is_empty() {
+		// [exact] variant
+		if range.is_empty() && min != 0 {
 			return Ok(Repetition(min, min));
 		}
+
+		// [min..max] variant
 		range.parse::<Token![..]>()?;
 		let max =
 			if range.peek(LitInt) { range.parse::<LitInt>()?.base10_parse()? } else { u32::MAX };
@@ -119,22 +123,21 @@ fn parse_repetition(buf: &ParseBuffer) -> syn::Result<Repetition> {
 		}
 		Ok(Repetition(min, max))
 	} else {
-		Ok(Repetition::Once)
+		Ok(Repetition::ONCE)
 	}
 }
 
 fn parse_unit(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let start_span = buf.span();
 	let not = try_parse!(buf, Token![!]);
-	let near_span = buf.span();
 	let near = try_parse!(buf, Token![~]);
-	let mut flag_span = None;
-	if near | not {
-		flag_span = Span::join(&start_span, if near { near_span } else { start_span })
-	};
+	let flag_span = (not | near).then_some(start_span);
 
-	let atom = if buf.peek(Ident) {
-		let path = buf.call(Path::parse_separated_nonempty)?;
+	let keyword_path_start =
+		buf.peek(Token![super]) | buf.peek(Token![self]) | buf.peek(Token![crate]);
+	let atom = if buf.peek(Ident) | keyword_path_start {
+		let path = buf.call(Path::parse_mod_style)?;
+		// call atom
 		if buf.peek(Token![<]) {
 			buf.parse::<Token![<]>()?;
 
@@ -146,7 +149,7 @@ fn parse_unit(buf: &ParseBuffer) -> syn::Result<Expr> {
 			buf.parse::<Token![>]>()?;
 			Atom::Call { path: Box::new(path), args }
 		} else {
-			Atom::Term(path)
+			Atom::Path(Box::new(path))
 		}
 	} else if buf.peek(Lit) {
 		Atom::Literal(buf.parse()?)
@@ -171,6 +174,8 @@ fn parse_unit(buf: &ParseBuffer) -> syn::Result<Expr> {
 }
 
 fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<Option<Expr>> {
+	// test capture start: '(' ident rep? ('=' | ':' & !':')
+	// group atom can be (mod::matcher)
 	let fork = buf.fork();
 	let Ok(ident) = fork.parse::<Ident>() else {
 		return Ok(None);
@@ -181,6 +186,7 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 		return Ok(None);
 	}
 	buf.advance_to(&fork);
+
 	if let Some(span) = flag_span {
 		return Err(Error::new(span, "capture can not have flags"));
 	}
@@ -201,20 +207,22 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 	Ok(Some(Expr::Capture { ident, rep, ty, conv, type_info: Box::default(), expr }))
 }
 
+/// can be used in range
 fn is_simple_unit(unit: &Expr) -> bool {
 	let Expr::Unit { not, near, repetition, atom, .. } = unit else {
 		return false;
 	};
-	if not | near || *repetition != Repetition::Once {
+	if not | near || *repetition != Repetition::ONCE {
 		return false;
 	};
 	match atom {
-		Atom::Block(_) | Atom::Literal(_) | Atom::Term(_) => true,
+		Atom::Block(_) | Atom::Literal(_) | Atom::Path(_) => true,
 		Atom::Group(expr) => is_simple_unit(expr),
 		_ => false,
 	}
 }
 
+/// parse range if can, else a single unit
 fn parse_expr_range(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let lh = parse_unit(buf)?;
 
@@ -237,13 +245,17 @@ fn parse_expr_range(buf: &ParseBuffer) -> syn::Result<Expr> {
 	Ok(lh)
 }
 
-fn expr_end(buf: &ParseBuffer) -> bool {
+// parses expr at different levels: or -> seq -> and
+fn at_expr_end(buf: &ParseBuffer) -> bool {
+	// the regular one like , and ;
+	// '>': at end of call atom
+	// '=': at end of capture before conv block
 	let is_comm = buf.peek(Token![,]);
 	is_comm || buf.peek(Token![;]) || buf.peek(Token![>]) || buf.peek(Token![=]) || buf.is_empty()
 }
 fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let expr = parse_expr_range(buf)?;
-	if buf.peek(Token![|]) || expr_end(buf) {
+	if buf.peek(Token![|]) || at_expr_end(buf) {
 		return Ok(expr);
 	}
 	if !buf.peek(Token![&]) {
@@ -257,11 +269,11 @@ fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
 }
 fn parse_expr_seq(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let expr = parse_expr_and(buf)?;
-	if buf.peek(Token![|]) || expr_end(buf) {
+	if buf.peek(Token![|]) || at_expr_end(buf) {
 		return Ok(expr);
 	}
 	let mut exprs = vec![expr];
-	while !(buf.peek(Token![|]) || expr_end(buf)) {
+	while !(buf.peek(Token![|]) || at_expr_end(buf)) {
 		exprs.push(parse_expr_and(buf)?);
 	}
 	Ok(Expr::Seq(exprs))
@@ -269,7 +281,7 @@ fn parse_expr_seq(buf: &ParseBuffer) -> syn::Result<Expr> {
 
 pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let expr = parse_expr_seq(buf)?;
-	if buf.peek(Token![&]) || expr_end(buf) {
+	if buf.peek(Token![&]) || at_expr_end(buf) {
 		return Ok(expr);
 	}
 	if !buf.peek(Token![|]) {
@@ -282,14 +294,22 @@ pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
 	Ok(Expr::Or(exprs))
 }
 
+/// a term in gramex macro: `let arr<M> = '[' list<M, ','> ']';`
+///
 /// **grammer**: `"let" ident ('<' (args = list<ident, ','>) '>')? (':' (ty = path))? = expr ("=>" (conv = block))?`
 #[derive(Debug, Clone)]
 pub struct Term {
 	pub name: Ident,
 	pub args: Vec<Ident>,
-	pub resolved: TokenStream,
+	pub resolved_type: TokenStream,
 	pub expr: Expr,
 }
+/// the gramex macro
+///
+/// **grammer**: `
+///   (visibility (mod_name = ident))? 'for' (matched_type = ty) ';'
+///   (use_decls* = use_decl) (terms* = term)
+/// `
 #[derive(Debug, Clone)]
 pub struct GramexMacro {
 	pub mod_vis: Visibility,
@@ -300,7 +320,6 @@ pub struct GramexMacro {
 }
 pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 	let mod_vis = buf.parse::<Visibility>()?;
-	try_parse!(buf, Token![pub]);
 	let mod_name = if try_parse!(buf, Token![mod]) { Some(buf.parse()?) } else { None };
 	if mod_vis != Visibility::Inherited && mod_name.is_none() {
 		return Err(Error::new(mod_vis.span(), "visibility without module specifier"));
@@ -342,14 +361,15 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 		if try_parse!(buf, Token![=>]) {
 			conv = Some(Box::new(buf.parse::<Block>()?));
 		}
+		buf.parse::<Token![;]>()?;
 
+		// wrap the root expr with a root capture
 		let cap_ident = Ident::new("root", name.span());
 		#[rustfmt::skip]
 		let expr = Expr::Capture {
-			ident: cap_ident, rep: Repetition::Once, ty, conv, type_info: Box::default(), expr,
+			ident: cap_ident, rep: Repetition::ONCE, ty, conv, type_info: Box::default(), expr,
 		};
-		buf.parse::<Token![;]>()?;
-		terms.push(Term { name, args, expr, resolved: TokenStream::new() });
+		terms.push(Term { name, args, expr, resolved_type: TokenStream::new() });
 	}
 
 	Ok(GramexMacro { mod_vis, mod_name, use_decls, matched_type, terms })

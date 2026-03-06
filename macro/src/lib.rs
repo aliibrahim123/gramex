@@ -4,7 +4,7 @@ mod parse;
 
 use proc_macro::TokenStream;
 use quote::{ToTokens, TokenStreamExt, format_ident, quote};
-use syn::{Pat, parse_macro_input};
+use syn::parse_macro_input;
 
 use crate::{
 	gen_matcher::{Ctx, gen_term},
@@ -19,16 +19,19 @@ pub fn gramex(input: TokenStream) -> TokenStream {
 	let GramexMacro { matched_type, mod_name, use_decls, mod_vis, terms } = module;
 	for term in &terms {
 		let captures_mod = &format_ident!("{}_captures", term.name);
-		mod_def.append_all(gen_term(term, &matched_type, &Ctx { captures_mod }));
+		let mut ctx = Ctx { captures_mod, match_target: &matched_type, mat_label_id: 0 };
+		mod_def.append_all(gen_term(term, &mut ctx));
 	}
 
 	let mut uses = quote! {};
 	for use_decl in &use_decls {
 		ToTokens::to_tokens(use_decl, &mut uses);
 	}
-
+	#[allow(nonstandard_style)]
 	match mod_name {
-		Some(name) => quote! { #mod_vis mod #name { use super::*; #uses #mod_def } },
+		Some(name) => quote! { #[allow(unused, nonstandard_style)]
+			#mod_vis mod #name { use super::*; #uses #mod_def }
+		},
 		None => mod_def,
 	}
 	.into()
