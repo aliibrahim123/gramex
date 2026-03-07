@@ -34,7 +34,9 @@ fn gen_atom(atom: &Atom, ctx: &mut Ctx) -> TokenStream {
 				let mat = gen_expr(arg, ctx);
 				let match_target = &ctx.match_target;
 				args_res.append_all(quote! {
-					|value: &'_ #match_target, ind: &mut usize, status: &::gramex::MatchStatus| #mat,
+					|value: &'_ #match_target, ind: &mut usize, status: &::gramex::MatchStatus| {
+						let status = &mut status.clone(); #mat
+					},
 				});
 			}
 			quote! { Into::<::gramex::MatchSignal>::into(#path(value, #args_res ind, status)) }
@@ -334,6 +336,16 @@ pub fn gen_matcher(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 		if sig != ::gramex::MatchSignal::Matched { return Err(sig.into_err(*ind)) }
 	}
 }
+fn gen_match_body(matcher: TokenStream, breaker: TokenStream) -> TokenStream {
+	quote! {
+		let ind = &mut 0;
+		let status = &mut ::gramex::MatchStatus::default();
+		#matcher
+		if *ind != <_ as ::gramex::MatchAble>::len(value) {
+			#breaker Err(::gramex::MatchError::excess(*ind))
+		}
+	}
+}
 pub fn gen_term(term: &Term, ctx: &mut Ctx) -> TokenStream {
 	let match_target = ctx.match_target;
 	let Term { name, args, resolved_type: resolved, expr } = term;
@@ -346,6 +358,10 @@ pub fn gen_term(term: &Term, ctx: &mut Ctx) -> TokenStream {
 	args_list.append_terminated(args, quote! { , });
 
 	let matcher = gen_matcher(expr, ctx);
+	let match_body = gen_match_body(
+		quote! { let cap = #name(value, #args_list ind, status)?; },
+		quote! { return },
+	);
 	let match_name = format_ident!("match_{name}");
 	quote! {
 		pub fn #name<'a> (
@@ -357,14 +373,19 @@ pub fn gen_term(term: &Term, ctx: &mut Ctx) -> TokenStream {
 
 		pub fn #match_name<'a> (value: &'a #match_target, #args_tokens)
 			-> ::gramex::MatchResult<#resolved>
-		{
-			let ind = &mut 0;
-			let status = &::gramex::MatchStatus::default();
-			let cap = #name(value, #args_list ind, status)?;
-			if *ind != <_ as ::gramex::MatchAble>::len(value) {
-				return Err(::gramex::MatchError::excess(*ind))
-			}
-			Ok(cap)
-		}
+		{ #match_body Ok(cap) }
+	}
+}
+pub fn gen_matcher_expr(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
+	let matcher = gen_expr(expr, ctx);
+	let match_body = quote! {
+		let sig = #matcher;
+		if sig != ::gramex::MatchSignal::Matched { break 'mat_0 Err(sig.into_err(*ind)) }
+	};
+	let match_body = gen_match_body(match_body, quote! { break 'mat_0 });
+	quote! {
+		let mut cap_root = None;
+		#match_body
+		Ok(unsafe { cap_root.unwrap_unchecked() })
 	}
 }

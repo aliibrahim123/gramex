@@ -2,7 +2,7 @@ use std::ops::Range;
 
 mod str;
 
-pub use gramex_macro::gramex;
+pub use gramex_macro::{gramex, matches, try_match};
 
 pub trait MatchAble {
 	fn len(&self) -> usize;
@@ -29,7 +29,7 @@ impl MatchSignal {
 		}
 	}
 	pub fn is_err(&self) -> bool {
-		!matches!(self, Self::Matched)
+		!core::matches!(self, Self::Matched)
 	}
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -88,7 +88,7 @@ impl<T: MatchAble + ?Sized, F: for<'a> MatcherBridge<'a, T>> MatchBy<F> for T {
 		matcher.call(self, ind, status)
 	}
 }
-pub trait MatcherBridge<'a, T: ?Sized> {
+trait MatcherBridge<'a, T: ?Sized> {
 	fn call(&self, value: &'a T, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
 }
 impl<'a, T: MatchAble + ?Sized, F, R: Into<MatchSignal>> MatcherBridge<'a, T> for F

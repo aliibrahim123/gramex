@@ -3,13 +3,14 @@ mod gen_types;
 mod parse;
 
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::{ToTokens, TokenStreamExt, format_ident, quote};
-use syn::parse_macro_input;
+use syn::{Ident, parse_macro_input};
 
 use crate::{
-	gen_matcher::{Ctx, gen_term},
-	gen_types::resolve_types_macro,
-	parse::{GramexMacro, parse_gramex_macro},
+	gen_matcher::{Ctx, gen_matcher_expr, gen_term},
+	gen_types::{resolve_types_expr, resolve_types_macro},
+	parse::{GramexMacro, MatcherExpr, parse_gramex_macro, parse_matcher_expr},
 };
 #[proc_macro]
 pub fn gramex(input: TokenStream) -> TokenStream {
@@ -27,7 +28,7 @@ pub fn gramex(input: TokenStream) -> TokenStream {
 	for use_decl in &use_decls {
 		ToTokens::to_tokens(use_decl, &mut uses);
 	}
-	#[allow(nonstandard_style)]
+
 	match mod_name {
 		Some(name) => quote! { #[allow(unused, nonstandard_style)]
 			#mod_vis mod #name { use super::*; #uses #mod_def }
@@ -35,4 +36,31 @@ pub fn gramex(input: TokenStream) -> TokenStream {
 		None => mod_def,
 	}
 	.into()
+}
+fn match_expr(input: TokenStream, suffix: proc_macro2::TokenStream) -> TokenStream {
+	let MatcherExpr { expr, matched_type, value } =
+		parse_macro_input!(input with parse_matcher_expr);
+	let cap_mod = Ident::new("captures", Span::call_site());
+	let mod_def =
+		resolve_types_expr(&expr, &matched_type, &cap_mod).unwrap_or_else(|e| e.to_compile_error());
+
+	let mut ctx = Ctx { captures_mod: &cap_mod, match_target: &matched_type, mat_label_id: 0 };
+	let matcher = gen_matcher_expr(&expr, &mut ctx);
+
+	quote! { match AsRef::<#matched_type>::as_ref(&#value) {
+		value => {
+			#[allow(unused, nonstandard_style)] let res = 'mat_0: { #mod_def #matcher };
+			res
+		}
+	} #suffix }
+	.into()
+}
+/// hallo
+#[proc_macro]
+pub fn try_match(input: TokenStream) -> TokenStream {
+	match_expr(input, quote! {})
+}
+#[proc_macro]
+pub fn matches(input: TokenStream) -> TokenStream {
+	match_expr(input, quote! { .is_ok() })
 }
