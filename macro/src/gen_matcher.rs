@@ -26,7 +26,7 @@ fn gen_atom(atom: &Atom, ctx: &mut Ctx) -> TokenStream {
 		Atom::Literal(lit) => match_by(lit),
 		Atom::Path(path) => match_by(path),
 		Atom::Block(block) => match_by(block),
-		Atom::Any => quote! {{<_ as ::gramex::MatchAble>::skip_1(value, ind, status)}},
+		Atom::Any => quote! { <_ as ::gramex::MatchAble>::skip_1(value, ind, status) },
 		Atom::Group(expr) => gen_expr(expr, ctx),
 		Atom::Call { path, args } => {
 			let mut args_res = quote! {};
@@ -34,7 +34,7 @@ fn gen_atom(atom: &Atom, ctx: &mut Ctx) -> TokenStream {
 				let mat = gen_expr(arg, ctx);
 				let match_target = &ctx.match_target;
 				args_res.append_all(quote! {
-					|value: &'_ #match_target, ind: &mut usize, status: &::gramex::MatchStatus| {
+					|value: &#match_target, ind: &mut usize, status: &::gramex::MatchStatus| {
 						let status = &mut status.clone(); #mat
 					},
 				});

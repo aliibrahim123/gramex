@@ -2,7 +2,7 @@ use std::ops::Range;
 
 mod str;
 
-pub use gramex_macro::{gramex, matches, try_match};
+pub use gramex_macro::{gramex, matcher, matches, try_match};
 
 pub trait MatchAble {
 	fn len(&self) -> usize;
@@ -99,7 +99,8 @@ where
 		self(val, i, s).into()
 	}
 }
-pub fn by<T: MatchAble + ?Sized, F: Fn(&T, &mut usize, &MatchStatus) -> MatchSignal>(
+
+pub fn by<T: MatchAble + ?Sized, F: for<'a> Fn(&'a T, &mut usize, &MatchStatus) -> MatchSignal>(
 	matcher: F,
 ) -> F {
 	matcher
@@ -108,5 +109,8 @@ pub fn by<T: MatchAble + ?Sized, F: Fn(&T, &mut usize, &MatchStatus) -> MatchSig
 pub mod __private {
 	pub fn conv<T, U>(cap: T, conv: impl Fn(T) -> U) -> U {
 		conv(cap)
+	}
+	pub fn _as<T>(v: T) -> T {
+		v
 	}
 }

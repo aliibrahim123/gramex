@@ -374,7 +374,9 @@ pub fn parse_gramex_macro(buf: &ParseBuffer) -> syn::Result<GramexMacro> {
 
 	Ok(GramexMacro { mod_vis, mod_name, use_decls, matched_type, terms })
 }
-
+/// `try_match` and `matches` macros
+///
+/// **grammer**: (value = rust_expr) ':' (matched_type = ty) ',' (expr = expr)
 pub struct MatcherExpr {
 	pub value: syn::Expr,
 	pub expr: Expr,
@@ -396,4 +398,24 @@ pub fn parse_matcher_expr(buf: &ParseBuffer) -> syn::Result<MatcherExpr> {
 	};
 
 	Ok(MatcherExpr { value, expr, matched_type })
+}
+pub struct Matcher {
+	pub expr: Expr,
+	pub matched_type: Type,
+}
+pub fn parse_matcher(buf: &ParseBuffer) -> syn::Result<Matcher> {
+	buf.parse::<Token![for]>()?;
+	let matched_type = buf.parse()?;
+	buf.parse::<Token![,]>()?;
+
+	let expr = Box::new(parse_expr(buf)?);
+	// wrap the root expr with a root capture
+	let cap_ident = Ident::new("root", Span::call_site());
+	#[rustfmt::skip]
+	let expr = Expr::Capture {
+		ident: cap_ident, rep: Repetition::ONCE, ty: None, conv: None, 
+		type_info: Box::default(), expr,
+	};
+
+	Ok(Matcher { expr, matched_type })
 }
