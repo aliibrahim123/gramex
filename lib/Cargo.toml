@@ -8,5 +8,8 @@ license = "MIT"
 repository = "https://github.com/aliibrahim123/gramex"
 documentation = "https://docs.rs/gramex/"
 
+[lib]
+doctest = false
+
 [dependencies]
 gramex-macro = { version = "0.1.0", path = "../macro" }

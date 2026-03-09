@@ -66,7 +66,7 @@ pub fn try_match(input: TokenStream) -> TokenStream {
 	let matcher = gen_matcher_expr(&expr, &mut ctx);
 
 	quote! { match AsRef::<#matched_type>::as_ref(&#value) {
-		value => {
+		_value => {
 			#[allow(unused, nonstandard_style)] let res = 'mat_0: { #mod_def #matcher };
 			res
 		}
@@ -88,11 +88,12 @@ pub fn matches(input: TokenStream) -> TokenStream {
 
 	quote! { {
 		let value = #value;
-		let value = AsRef::<#matched_type>::as_ref(&value);
+		let _value = AsRef::<#matched_type>::as_ref(&value);
 		let ind = &mut 0;
 		let status = &mut ::gramex::MatchStatus::default();
 		#[allow(unused, nonstandard_style)] let res = #matcher;
-		res == ::gramex::MatchSignal::Matched
+		if *ind != <_ as ::gramex::MatchAble>::len(_value) { false }
+		else { res == ::gramex::MatchSignal::Matched }
 	} }
 	.into()
 }
@@ -109,7 +110,7 @@ pub fn matcher(input: TokenStream) -> TokenStream {
 		#mod_def
 		fn _as <F: for<'a> Fn(&'a #matched_type, &mut usize, &::gramex::MatchStatus)
 			-> ::gramex::MatchResult<captures::Root<'a>>> (f: F) -> F { f }
-		_as (|value, ind, status| { #matcher_body Ok(unsafe {  cap_root.unwrap_unchecked() }) })
+		_as (|_value, ind, status| { #matcher_body Ok(unsafe {  cap_root.unwrap_unchecked() }) })
 	} }
 	.into()
 }
