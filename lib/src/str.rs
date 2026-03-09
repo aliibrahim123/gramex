@@ -1,7 +1,4 @@
-use std::{
-	borrow::Cow,
-	ops::{Range, RangeInclusive},
-};
+use std::{borrow::Cow, ops::RangeInclusive};
 
 use crate::{MatchAble, MatchBy, MatchSignal, MatchStatus};
 

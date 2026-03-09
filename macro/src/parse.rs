@@ -382,20 +382,24 @@ pub struct MatcherExpr {
 	pub expr: Expr,
 	pub matched_type: Type,
 }
-pub fn parse_matcher_expr(buf: &ParseBuffer) -> syn::Result<MatcherExpr> {
+pub fn parse_matcher_expr(buf: &ParseBuffer, wrap_in_capture: bool) -> syn::Result<MatcherExpr> {
 	let value = buf.parse::<syn::Expr>()?;
 	buf.parse::<Token![:]>()?;
 	let matched_type = buf.parse()?;
 	buf.parse::<Token![,]>()?;
 
-	let expr = Box::new(parse_expr(buf)?);
-	// wrap the root expr with a root capture
-	let cap_ident = Ident::new("root", Span::call_site());
-	#[rustfmt::skip]
-	let expr = Expr::Capture {
-		ident: cap_ident, rep: Repetition::ONCE, ty: None, conv: None, 
-		type_info: Box::default(), expr,
-	};
+	let mut expr = parse_expr(buf)?;
+	if wrap_in_capture {
+		let cap_ident = Ident::new("root", Span::call_site());
+		expr = Expr::Capture {
+			ident: cap_ident,
+			rep: Repetition::ONCE,
+			ty: None,
+			conv: None,
+			type_info: Box::default(),
+			expr: Box::new(expr),
+		};
+	}
 
 	Ok(MatcherExpr { value, expr, matched_type })
 }

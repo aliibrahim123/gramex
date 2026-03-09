@@ -130,7 +130,7 @@ fn transform<'a>(expr: &'a Expr, terms: &'a [Term]) -> syn::Result<Option<CapTre
 		_ => None,
 	})
 }
-fn find_unallowed_capture(expr: &Expr) -> syn::Result<()> {
+pub fn find_unallowed_capture(expr: &Expr) -> syn::Result<()> {
 	match expr {
 		Expr::Capture { ident, .. } => Err(Error::new(ident.span(), "unallowed capture"))?,
 		Expr::And(exprs) | Expr::Or(exprs) | Expr::Seq(exprs) => {
