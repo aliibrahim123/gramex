@@ -254,7 +254,7 @@ fn resolve_capture(
 				fields_def.append_all(quote! { pub #ident: #resolved, });
 			});
 
-			cap_defs.append_all(quote! { #[derive(Debug)] pub struct #name<'a> {
+			cap_defs.append_all(quote! { #[derive(Debug, PartialEq)] pub struct #name<'a> {
 				pub matched: #matched_type, #fields_def
 				#[doc(hidden)] pub __life_marker: std::marker::PhantomData<&'a ()>
 			} });
@@ -268,7 +268,7 @@ fn resolve_capture(
 			});
 
 			let none = with_none.then(|| quote! { None, });
-			cap_defs.append_all(quote! { #[derive(Debug)] pub enum #name<'a> {
+			cap_defs.append_all(quote! { #[derive(Debug, PartialEq)] pub enum #name<'a> {
 				#none #var_def
 				#[doc(hidden)] __life_marker(std::convert::Infallible, std::marker::PhantomData<&'a ()>)
 			} });
