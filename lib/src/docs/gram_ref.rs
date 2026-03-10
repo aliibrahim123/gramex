@@ -4,17 +4,17 @@
 //! ```
 //! The `gramex` grammar syntax is inspired by standard metasyntax languages (notably **Wirth syntax notation (WSN)**) and regular expressions, but with a native Rust flavor.
 //!
-//! The `gramex` grammar works on a stream of tokens; this stream must implement the [`MatchAble`] trait.
+//! The `gramex` grammar works on a stream of tokens; this stream must implement the [`MatchAble`](`crate::MatchAble`) trait.
 //!
 //! `gramex` is composed of expressions that define patterns to match against that stream.
 //!
 //! `gramex` features the following expressions:
-//! - **Unit**: A matcher with modifiers.
-//! - **Range**: Matches a token against an inclusive range.
-//! - **Sequence**: Matches a sequence of expressions.
-//! - **Or**: Matches exactly one of the given expressions.
-//! - **And**: Matches multiple expressions against the exact same input.
-//! - **Capture**: Matches a section and captures its value.
+//! - **[`unit`](#unit)**: A matcher with modifiers.
+//! - **[`range`](#range)**: Matches a token against an inclusive range.
+//! - **[`sequence`](#sequence)**: Matches a sequence of expressions.
+//! - **[`or`](#or)**: Matches exactly one of the given expressions.
+//! - **[`and`](#and)**: Matches multiple expressions against the exact same input.
+//! - **[`capture`](#capture)**: Matches a section and captures its value.
 //!
 //! **Precedence:** `capture` > `range` > `unit` > `and` > `sequence` > `or`.
 //!
@@ -26,16 +26,18 @@
 //! ```
 //! Atoms are the fundamental units of the grammar; they perform the actual token-to-token matching.
 //!
-//! Atoms primarily resolve into values for which the stream implements [`MatchBy`].
+//! Atoms primarily resolve into values for which the stream implements [`MatchBy`](crate::MatchBy).
 //!
 //! Atoms come in the following types:
-//! - **Literal**: Any Rust literal (strings, numbers, booleans, floats) that the stream implements [`MatchBy`] for.
+//! #### Literal
+//! Any Rust literal (strings, numbers, booleans, floats) that the stream implements [`MatchBy`](crate::MatchBy) for.
 //! ```rust
 //! # use crate::{matches};
 //! assert!(matches!("abc": str, 'a' "bc"));
 //! assert!(!matches!("cba": str, "abc"));
 //! ```
-//! - **Path**: A path to a matching item (constant, static, function, or unit struct).
+//! #### Path
+//! A path to a matching item (constant, static, function, or unit struct).
 //! ```rust
 //! # use crate::*;
 //! mod example {
@@ -45,19 +47,23 @@
 //! static PAT2: &str = "c";
 //! assert!(matches!("abc": str, PAT1 example::PAT PAT2));
 //! ```
-//! - **Skip (`_`)**: Skips a single token. Under the hood, this calls [`MatchAble::skip_1`].
-//! - **Block**: A block expression that resolves to a matching value. It is evaluated on each iteration.
+//! #### Skip (`_`)
+//! Skips a single token. Under the hood, this calls [`MatchAble::skip_1`](crate::MatchAble::skip_1).
+//! #### Block
+//! A block expression that resolves to a matching value. It is evaluated on each iteration.
 //! ```rust
 //! # use crate::*;
 //! let pats = ['a', 'b'];
 //! assert!(matches!("abc": str, { pats[0] } { pats[1] } { a(|v| v == 'c') } ));
 //! ```
-//! - **Group**: An expression wrapped inside parentheses.
+//! #### Group
+//! An expression wrapped inside parentheses.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("ab123": str, ('a'..'z')+ ('0'..'9' | '-')*));
 //! ```
-//! - **Call**: Matches using a parameterized matcher, called with a set of matchers created from the passed expressions.
+//! #### Call
+//! Matches using a parameterized matcher, called with a set of matchers created from the passed expressions.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("a,b,c": str, list<alpha+, ','>));
@@ -67,22 +73,27 @@
 //! ```text
 //! "abc" !'a' ~"dec" hex? !('a'..'z')[3..5]
 //! ```
-//! A unit is an atom combined with modifiers.
+//! A unit is an [`atom`](#atom) combined with modifiers.
 //!
 //! ### Modifiers     
 //! Modifiers change the behavior of the matched atom; they are prefixed to the target atom.
 //!
-//! - **Not (`!`):** Matches exactly one token if the atom doesn't match.    
-//!   It always consumes exactly one token upon success, even if the negated pattern spans multiple tokens.     
-//!   It will fail on incomplete input.
+//! #### Not (`!`)
+//! Matches exactly one token if the atom doesn't match.
+//!  
+//!  It always consumes exactly one token upon success, even if the negated pattern spans multiple tokens.
+//!      
+//!  It will fail on incomplete input.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("b": str, !'a'));
 //! assert!(matches!("b": str, !"abc"));
 //! assert!(!matches!("abc": str, !"abc"));
 //! ```
-//! - **Near / Peek (`~`)**: Matches an atom without advancing the stream.     
-//!   Can be prefixed with the `!` modifier to invert the result of the lookahead (which does not fail on incomplete input).
+//! #### Near (`~`)
+//! Matches an atom without advancing the stream.     
+//!  
+//! Can be prefixed with the `!` modifier to invert the result of the lookahead (which does not fail on incomplete input).
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("abc": str, ~'a' ~"abc" !~"dec" _[3]));
@@ -91,39 +102,46 @@
 //! ### Repetition      
 //! Repetition specifies how many times an atom should be matched, suffixed to the atom.
 //!
-//! - **Optional (`?`)**: Matches the atom 0 or 1 time.
+//! #### Optional (`?`)
+//! Matches the atom 0 or 1 time.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("ab": str, 'a'? 'b' 'c'?));
 //! ```
-//! - **Multi (`*`)**: Matches the atom 0 or more times.
+//! #### Multi (`*`)
+//! Matches the atom 0 or more times.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("aaac": str, 'a'* 'b'* 'c'*));
 //! ```
-//! - **Plus (`+`)**: Matches the atom 1 or more times.
+//! #### Plus (`+`)
+//! Matches the atom 1 or more times.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("aaab": str, 'a'+ 'b'+));
 //! assert!(!matches!("aaac": str, 'a'+ 'b'+ 'c'+));
 //! ```
-//! - **Exact (`[count]`)**: Matches the atom exactly `count` times.
+//! #### Exact (`[count]`)
+//! Matches the atom exactly `count` times.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("aaabb": str, 'a'[3] 'b'[2]));
 //! assert!(!matches!("a": str, 'a'[2]));
 //! assert!(!matches!("aaa": str, 'a'[2]));
 //! ```
-//! - **Range (`[min..max]`)**: Matches the atom between `min` and `max` (inclusive) times.           
-//!   `min` and `max` are optional; they default to `0` and infinity, respectively.     
+//! #### Range (`[min..max]`)
+//! Matches the atom between `min` and `max` (inclusive) times.
+//!
+//! `min` and `max` are optional; they default to `0` and infinity, respectively.     
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("aaabbcccc": str, 'a'[2..4] 'b'[..3] 'c'[3..]));
 //! assert!(!matches!("a": str, 'a'[2..]));
 //! assert!(!matches!("aaaaa": str, 'a'[2..4]));
 //! ```
+//! <br>
 //!
-//! *Note: `?` is `[0..1]`, `*` is `[0..]`, `+` is `[1..]`, and no repetition implies `[1]`.*
+//! **Note**: `?` is `[0..1]`, `*` is `[0..]`, `+` is `[1..]`, and no repetition implies `[1]`.
 //!
 //! Unbounded repetition is greedy, stopping only at a mismatch or the end of input. You can use intersections (`&`) to control bounds.
 //! ```rust
@@ -212,15 +230,19 @@
 //! ```
 //!
 //! ### Capture Types
-//! - **Normal**: The matched expression does not contain any nested captures.      
-//!   These captures inherit the type of the matched section.
+//! #### Normal
+//! The matched expression does not contain any nested captures.
+//!
+//! These captures inherit the type of the matched section.
 //! ```rust
 //! # use crate::*;
 //! assert_eq!(try_match!("abcd": str, 'a' (bc = "bc") 'd').unwrap().bc, "bc");
 //! ```
 //!
-//! - **Term**: Matches a local unparameterized term and inherits the type of that term.      
-//!   Their matched expression must be a lone, unmodified path atom referring to that term.
+//! #### Term
+//! Matches a local unparameterized term and inherits the type of that term.      
+//!
+//! Their matched expression must be a lone, unmodified path atom referring to that term.
 //! ```rust
 //! # use crate::*;
 //! gramex! {
@@ -231,9 +253,12 @@
 //! assert_eq!(match_value("abc").unwrap().ident, "abc");
 //! ```
 //!
-//! - **Structured**: Captures that contain nested captures inside them.      
-//!   These nested captures can occur in any allowed place except inside an OR expression.     
-//!   Structured captures generate their own type, a struct containing their inner captures as fields, plus a `matched` field containing the raw matched slice.
+//! #### Structured
+//! Captures that contain nested captures inside them.      
+//!
+//! These nested captures can occur in any allowed place except inside an OR expression.
+//!
+//! Structured captures generate their own type, a struct containing their inner captures as fields, plus a `matched` field containing the raw matched slice.
 //! ```rust
 //! # use crate::*;
 //! let capture = try_match!("abcd": str, 'a' (bc = (b = 'b') (c = 'c')) 'd').unwrap().bc;
@@ -242,10 +267,14 @@
 //! assert_eq!(capture.c, "c");
 //! ```
 //!
-//! - **Enumerated**: The matched expression is an OR expression containing nested captures.     
-//!   The inner captures do not need to be the ORed expression directly; they can be nested deeper inside it. However, no two captures can exist in the exact same branch.     
-//!   Not all OR branches need to contain captures.    
-//!   Enumerated captures generate their own enum type, representing the inner captures as variants, plus a default `None` variant if not all branches have captures.
+//! #### Enumerated
+//!  The matched expression is an `or` expression containing nested captures.    
+//!
+//! The inner captures do not need to be the ORed expression directly; they can be nested deeper inside it. However, no two captures can exist in the exact same branch.     
+//!
+//! Not all OR branches need to contain captures.    
+//!
+//! Enumerated captures generate their own enum type, representing the inner captures as variants, plus a default `None` variant if not all branches have captures.
 //! ```rust
 //! # use crate::*;
 //! gramex! { for str; let example = 'a' (bc = "bc" | (b2c3 = "bbccc") | (b3c1 = "bbbc")) 'd'; }

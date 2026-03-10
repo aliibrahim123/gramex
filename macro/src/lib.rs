@@ -53,7 +53,6 @@ macro_rules! parse_input {
 	};
 }
 
-/// hallo
 #[proc_macro]
 pub fn try_match(input: TokenStream) -> TokenStream {
 	let MatcherExpr { expr, matched_type, value } =
@@ -72,6 +71,7 @@ pub fn try_match(input: TokenStream) -> TokenStream {
 	} }
 	.into()
 }
+
 #[proc_macro]
 pub fn matches(input: TokenStream) -> TokenStream {
 	let MatcherExpr { expr, matched_type, value } =
