@@ -411,15 +411,7 @@ pub fn parse_matcher(buf: &ParseBuffer) -> syn::Result<Matcher> {
 	buf.parse::<Token![for]>()?;
 	let matched_type = buf.parse()?;
 	buf.parse::<Token![,]>()?;
-
-	let expr = Box::new(parse_expr(buf)?);
-	// wrap the root expr with a root capture
-	let cap_ident = Ident::new("root", Span::call_site());
-	#[rustfmt::skip]
-	let expr = Expr::Capture {
-		ident: cap_ident, rep: Repetition::ONCE, ty: None, conv: None, 
-		type_info: Box::default(), expr,
-	};
+	let expr = parse_expr(buf)?;
 
 	Ok(Matcher { expr, matched_type })
 }

@@ -12,7 +12,7 @@ use syn::{
 };
 
 use crate::{
-	gen_matcher::{Ctx, gen_expr, gen_matcher, gen_matcher_expr, gen_term},
+	gen_matcher::{Ctx, gen_expr, gen_matcher_expr, gen_term},
 	gen_types::{find_unallowed_capture, resolve_types_expr, resolve_types_macro},
 	parse::{
 		GramexMacro, Matcher, MatcherExpr, parse_gramex_macro, parse_matcher, parse_matcher_expr,
@@ -65,11 +65,10 @@ pub fn try_match(input: TokenStream) -> TokenStream {
 	let mut ctx = Ctx { captures_mod: &cap_mod, match_target: &matched_type, mat_label_id: 0 };
 	let matcher = gen_matcher_expr(&expr, &mut ctx);
 
-	quote! { match AsRef::<#matched_type>::as_ref(&#value) {
-		_value => {
-			#[allow(unused, nonstandard_style)] let res = 'mat_0: { #mod_def #matcher };
-			res
-		}
+	quote! { {
+		let _value = #value;
+		#[allow(unused, nonstandard_style)] let res = 'mat_0: { #mod_def #matcher };
+		res
 	} }
 	.into()
 }
@@ -87,8 +86,7 @@ pub fn matches(input: TokenStream) -> TokenStream {
 	let matcher = gen_expr(&expr, &mut ctx);
 
 	quote! { {
-		let value = #value;
-		let _value = AsRef::<#matched_type>::as_ref(&value);
+		let _value = #value;
 		let ind = &mut 0;
 		let status = &mut ::gramex::MatchStatus::default();
 		#[allow(unused, nonstandard_style)] let res = #matcher;
@@ -100,17 +98,20 @@ pub fn matches(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn matcher(input: TokenStream) -> TokenStream {
 	let Matcher { expr, matched_type } = parse_macro_input!(input with parse_matcher);
-	let cap_mod = Ident::new("captures", Span::call_site());
-	let mod_def =
-		resolve_types_expr(&expr, &matched_type, &cap_mod).unwrap_or_else(|e| e.to_compile_error());
 
-	let mut ctx = Ctx { captures_mod: &cap_mod, match_target: &matched_type, mat_label_id: 0 };
-	let matcher_body = gen_matcher(&expr, &mut ctx);
+	if let Err(err) = find_unallowed_capture(&expr) {
+		return err.to_compile_error().into();
+	}
+
+	let ident = Ident::new("how_did_i_get_here", Span::call_site());
+	let mut ctx = Ctx { captures_mod: &ident, match_target: &matched_type, mat_label_id: 0 };
+	let matcher = gen_expr(&expr, &mut ctx);
+
 	quote! { {
-		#mod_def
-		fn _as <F: for<'a> Fn(&'a #matched_type, &mut usize, &::gramex::MatchStatus)
-			-> ::gramex::MatchResult<captures::Root<'a>>> (f: F) -> F { f }
-		_as (|_value, ind, status| { #matcher_body Ok(unsafe {  cap_root.unwrap_unchecked() }) })
+		#[allow(unused, nonstandard_style)]
+		|_value: &#matched_type, ind: &mut usize, status: &::gramex::MatchStatus| {
+			let status = &mut status.clone(); #matcher
+		}
 	} }
 	.into()
 }

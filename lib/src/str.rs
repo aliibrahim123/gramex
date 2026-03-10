@@ -3,6 +3,7 @@ use std::{borrow::Cow, ops::RangeInclusive};
 use crate::{MatchAble, MatchBy, MatchSignal, MatchStatus};
 
 impl MatchAble for str {
+	type Slice<'a> = &'a str;
 	#[inline]
 	fn len(&self) -> usize {
 		self.len()

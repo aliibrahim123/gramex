@@ -300,7 +300,7 @@ fn resolve_types(
 	let Expr::Capture { type_info, .. } = root.expr else { unreachable!() };
 
 	let mut type_defs = TokenStream::new();
-	let matched_type = quote! { &'a #matched_type };
+	let matched_type = quote! { <#matched_type as ::gramex::MatchAble>::Slice<'a> };
 
 	let ResolveResult { cap, resolved, has_type_map: has_map, .. } =
 		resolve_capture(&root, &matched_type, &mut type_defs, id_counter);

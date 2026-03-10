@@ -39,7 +39,7 @@ fn gen_atom(atom: &Atom, ctx: &mut Ctx) -> TokenStream {
 					},
 				});
 			}
-			quote! { Into::<::gramex::MatchSignal>::into(#path(_value, #args_res ind, status)) }
+			quote! { #path(_value, #args_res ind, status) }
 		}
 	}
 }
@@ -246,12 +246,15 @@ fn gen_capture(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 			let cap = <_ as ::gramex::MatchAble>::slice(_value, start_ind..*ind);
 		}),
 
-		CaptureKind::Term(term) => match_block.append_all(quote! {
-			let cap = match #term(_value, ind, status) {
-				Ok(cap) => cap,
-				err => break #mat_lab Into::<::gramex::MatchSignal>::into(err),
-			};
-		}),
+		CaptureKind::Term(term) => {
+			let term = format_ident!("capture_{term}");
+			match_block.append_all(quote! {
+				let cap = match #term(_value, ind, status) {
+					Ok(cap) => cap,
+					err => break #mat_lab Into::<::gramex::MatchSignal>::into(err),
+				};
+			})
+		}
 		CaptureKind::Group(fields) => {
 			let mut struct_init = quote! {};
 			for field in fields {
@@ -328,15 +331,6 @@ pub fn gen_expr(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 	}
 }
 
-pub fn gen_matcher(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
-	let root_matcher = gen_capture(expr, ctx);
-	quote! {
-		let status = &mut status.clone();
-		let mut cap_root = None;
-		let sig = #root_matcher;
-		if sig != ::gramex::MatchSignal::Matched { return Err(sig.into_err(*ind)) }
-	}
-}
 fn gen_match_body(matcher: TokenStream, breaker: TokenStream) -> TokenStream {
 	quote! {
 		let ind = &mut 0;
@@ -358,22 +352,37 @@ pub fn gen_term(term: &Term, ctx: &mut Ctx) -> TokenStream {
 	let mut args_list = quote! {};
 	args_list.append_terminated(args, quote! { , });
 
-	let matcher = gen_matcher(expr, ctx);
+	let match_name = format_ident!("match_{name}");
+	let capture_name = format_ident!("capture_{name}");
+
+	let matcher = gen_capture(expr, ctx);
 	let match_body = gen_match_body(
-		quote! { let cap = #name(_value, #args_list ind, status)?; },
+		quote! { let cap = #capture_name(_value, #args_list ind, status)?; },
 		quote! { return },
 	);
-	let match_name = format_ident!("match_{name}");
+
+	let life_1 = if args_list.is_empty() {
+		quote! {}
+	} else {
+		quote! { 'a }
+	};
+
 	quote! {
-		pub fn #name<'a> (
+		pub fn #capture_name<'a> (
 			_value: &'a #match_target, #args_tokens ind: &mut usize, status: &::gramex::MatchStatus
 		) -> ::gramex::MatchResult<#resolved> {
-			#matcher;
+			let status = &mut status.clone();
+			let mut cap_root = None;
+			let sig = #matcher;
+			if sig != ::gramex::MatchSignal::Matched { return Err(sig.into_err(*ind)) }
 			Ok(unsafe { cap_root.unwrap_unchecked() })
 		}
-
-		pub fn #match_name<'a> (_value: &'a #match_target, #args_tokens)
-			-> ::gramex::MatchResult<#resolved>
+		pub fn #name<'a> (
+			_value: &#life_1 #match_target, #args_tokens ind: &mut usize, status: &::gramex::MatchStatus
+		) -> ::gramex::MatchSignal {
+			#capture_name(_value, #args_list ind, status).into()
+		}
+		pub fn #match_name<'a> ( _value: &'a #match_target, #args_tokens) -> ::gramex::MatchResult<#resolved>
 		{ #match_body Ok(cap) }
 	}
 }

@@ -55,14 +55,31 @@ mod str;
 #[cfg(doc)]
 pub mod docs {
 	pub mod glossary;
+	/// grammar reference
 	pub mod gram_ref;
 }
 
 pub use gramex_macro::{gramex, matcher, matches, try_match};
 
+/// a type that can be matched by gramex
+///
+/// `MatchAble` provider a common interface for all types matched using gramex.
+///
+/// it views the implementing type as a stream of tokens that can be sliced and accessed randomly.
+///
+/// # example
+/// ```
+/// enum Token {
+/// 	Str(String),
+/// 	Nb(u64),
+/// }
+/// ```
 pub trait MatchAble {
+	type Slice<'a>
+	where
+		Self: 'a;
 	fn len(&self) -> usize;
-	fn slice(&self, range: Range<usize>) -> &Self;
+	fn slice(&self, range: Range<usize>) -> Self::Slice<'_>;
 	fn skip_1(&self, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
 }
 pub trait MatchBy<T> {
@@ -138,23 +155,20 @@ impl<T> From<MatchResult<T>> for MatchSignal {
 	}
 }
 
-pub trait Matcher<T: MatchAble + ?Sized>: for<'a> MatcherBridge<'a, T> {}
-impl<T: MatchAble + ?Sized, F: for<'a> MatcherBridge<'a, T>> Matcher<T> for F {}
-#[doc(hidden)]
-pub trait MatcherBridge<'a, T: ?Sized> {
-	fn call(&self, value: &'a T, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
+pub trait Matcher<T: MatchAble + ?Sized>: Fn(&T, &mut usize, &MatchStatus) -> MatchSignal {
+	fn do_match(&self, matchable: &T, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
 }
-impl<T: MatchAble + ?Sized, F: for<'a> MatcherBridge<'a, T>> MatchBy<F> for T {
-	fn match_by(&self, matcher: F, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
-		matcher.call(self, ind, status)
+impl<T: MatchAble + ?Sized, M: Matcher<T>> MatchBy<M> for T {
+	fn match_by(&self, matcher: M, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
+		matcher.do_match(self, ind, status)
 	}
 }
-impl<'a, T: MatchAble + ?Sized, F, R: Into<MatchSignal>> MatcherBridge<'a, T> for F
+impl<T: MatchAble + ?Sized, F> Matcher<T> for F
 where
-	F: Fn(&'a T, &mut usize, &MatchStatus) -> R,
+	F: for<'a> Fn(&'a T, &mut usize, &MatchStatus) -> MatchSignal,
 {
-	fn call(&self, val: &'a T, i: &mut usize, s: &MatchStatus) -> MatchSignal {
-		self(val, i, s).into()
+	fn do_match(&self, matchable: &T, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
+		self(matchable, ind, status)
 	}
 }
 
