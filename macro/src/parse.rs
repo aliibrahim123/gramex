@@ -403,6 +403,9 @@ pub fn parse_matcher_expr(buf: &ParseBuffer, wrap_in_capture: bool) -> syn::Resu
 
 	Ok(MatcherExpr { value, expr, matched_type })
 }
+/// `matcher` macro
+///
+/// **grammer**: "for" (matched_type = ty) ',' (expr = expr)
 pub struct Matcher {
 	pub expr: Expr,
 	pub matched_type: Type,

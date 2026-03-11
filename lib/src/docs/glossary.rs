@@ -15,8 +15,19 @@
 //! ### token
 //! an individual unit of the matchable, like `char` for `str` and `u8` for `&[u8]`.
 //!
-//! ### parenthesized matcher
+//! ### parameterized matcher
 //! a function that matches a matchable, taking a list of matchers as arguments.
 //!
 //! **signature**: `Fn (T, ...Matcher<T>, &mut usize, &MatchStatus) -> Into<MatchSignal> where T: MatchAble`
+//!
+//! these function can not be used as [`Matcher`], but with [`call` atoms](docs::gram_ref#call).
+//!
+//! ### capturing function
+//! a function that matches like a matcher but returns a [`MatchResult`] of a capture instead of a [`MatchSignal`].
+//!
+//! **signature**: `Fn (T, &mut usize, &MatchStatus) -> MatchResult<Cap>` where `T` is the [`MatchAble`], and `Cap` is the capture type.
+//!
+//! these function can not be used as [`Matcher`], they are called with [term captures](docs::gram_ref#term).
+//!
+//! capturing functions can be parameterized like parameterized matchers, however must ba called rawly.
 use crate::*;

@@ -30,14 +30,14 @@
 //!
 //! Atoms come in the following types:
 //! #### Literal
-//! Any Rust literal (strings, numbers, booleans, floats) that the stream implements [`MatchBy`](crate::MatchBy) for.
+//! Any [literal](https://doc.rust-lang.org/stable/reference/tokens.html#literals) (strings, numbers, booleans, floats) that the stream implements [`MatchBy`](crate::MatchBy) for.
 //! ```rust
 //! # use crate::{matches};
 //! assert!(matches!("abc": str, 'a' "bc"));
 //! assert!(!matches!("cba": str, "abc"));
 //! ```
 //! #### Path
-//! A path to a matching item (constant, static, function, or unit struct).
+//! A [path](https://doc.rust-lang.org/stable/reference/paths.html#simple-paths) to a matching item (constant, static, function, or unit struct).
 //! ```rust
 //! # use crate::*;
 //! mod example {
@@ -50,7 +50,7 @@
 //! #### Skip (`_`)
 //! Skips a single token. Under the hood, this calls [`MatchAble::skip_1`](crate::MatchAble::skip_1).
 //! #### Block
-//! A block expression that resolves to a matching value. It is evaluated on each iteration.
+//! A [block expression](https://doc.rust-lang.org/stable/reference/expressions/block-expr.html) that resolves to a matching value. It is evaluated on each iteration.
 //! ```rust
 //! # use crate::*;
 //! let pats = ['a', 'b'];
@@ -63,7 +63,7 @@
 //! assert!(matches!("ab123": str, ('a'..'z')+ ('0'..'9' | '-')*));
 //! ```
 //! #### Call
-//! Matches using a parameterized matcher, called with a set of matchers created from the passed expressions.
+//! Matches using a [parameterized matcher](glossary#parameterized-matcher), called with a set of matchers created from the passed expressions.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("a,b,c": str, list<alpha+, ','>));
