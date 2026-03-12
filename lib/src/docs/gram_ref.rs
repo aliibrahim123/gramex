@@ -154,6 +154,7 @@
 //! ```rust
 //! # use crate::*;
 //! assert!(!matches!("bbc": str, !~'b'[3] ~'b'[2] !'a'[3]));
+//! assert!(!matches!("bbc": str, !~('b'[3]) ~('b'[2]) (!'a')[3]));
 //! ```
 //!
 //! # Range

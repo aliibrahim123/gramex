@@ -26,7 +26,10 @@ fn gen_atom(atom: &Atom, ctx: &mut Ctx) -> TokenStream {
 		Atom::Literal(lit) => match_by(lit),
 		Atom::Path(path) => match_by(path),
 		Atom::Block(block) => match_by(block),
-		Atom::Any => quote! { <_ as ::gramex::MatchAble>::skip_1(_value, ind, status) },
+		Atom::Any => quote! { match <_ as ::gramex::MatchAble>::get_n(_value, ind, 1, status) {
+			Ok(_) => ::gramex::MatchSignal::Matched,
+			Err(sig) => sig,
+		} },
 		Atom::Group(expr) => gen_expr(expr, ctx),
 		Atom::Call { path, args } => {
 			let mut args_res = quote! {};
@@ -115,6 +118,23 @@ fn gen_unit(unit: &Expr, ctx: &mut Ctx) -> TokenStream {
 			#mapper
 		} }
 	}
+
+	if repetition.0 == repetition.1 && matches!(atom, Atom::Any) && !not {
+		let count = repetition.0 as usize;
+		let matcher = quote! { match <_ as ::gramex::MatchAble>::get_n(_value, ind, #count, status) {
+			Ok(_) => ::gramex::MatchSignal::Matched,
+			Err(sig) => sig,
+		} };
+		return if *near {
+			quote! {{
+				let ind = &mut *ind.clone();
+				#matcher
+			}}
+		} else {
+			matcher
+		};
+	}
+
 	let matcher = gen_atom(atom, ctx);
 
 	if *near {

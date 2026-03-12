@@ -11,7 +11,7 @@
 //! - **rich grammar syntax:** native support for [`repetitions`](docs::gram_ref#repetition), alternations ([`|`](docs::gram_ref#or)), intersections ([`&`](docs::gram_ref#and)), ranges ([`..`](docs::gram_ref#range)), lookahead peeks ([`~`](docs::gram_ref#near-)), and negations ([`!`](docs::gram_ref#not-)).
 //! - **powerful capturing & mapping:** extract sections, nested or enumerated, and map them into custom types.
 //! - **extensible throught code**: just drop your custom matcher inside [`{}`](docs::gram_ref#block) block.
-//! - term based grammer defenition thought [`gramex`], or inlined expression matching through [`matches`] and [`try_match`]
+//! - term based grammer defenition thought [`gramex`], or inlined expression matching through [`matches`](matches!) and [`try_match`]
 //! - **batteries included**: comes with various built-in helpers and standard patterns.
 //!
 //! # quick guide
@@ -52,7 +52,9 @@
 //!
 use std::ops::Range;
 
-mod str;
+pub mod str;
+mod utility;
+pub use utility::*;
 #[cfg(doc)]
 pub mod docs {
 	pub mod glossary;
@@ -184,7 +186,7 @@ pub use gramex_macro::try_match;
 /// 	let abc = mbm<'a', 'c'>;
 /// }
 /// assert_eq!(matchers::match_abc("abc"), Ok("abc"));
-/// assert_eq!(matchers::match_mbm("abc", matcher_for('a'), matcher_for('c')), Ok("abc"));
+/// assert_eq!(matchers::match_mbm("abc", matcher_for(&'a'), matcher_for(&'c')), Ok("abc"));
 /// ```
 ///
 /// the term get generated into 3 functions:
@@ -220,56 +222,6 @@ pub use gramex_macro::try_match;
 /// alongside these types and maps, each module contains a `Root<'a>` type alias to the root capture resolved type.
 ///
 /// they also contains a `RootCap<'a>` type alias to the root capture own type if needed, plus a `root_types` map for the root capture if needed.
-///
-/// ```
-/// gramex! {
-/// 	mod matchers for str;
-/// 	let abc = 'a' 'b' 'c';
-/// 	let cap: String = (a = 'a') (b = 'b' | (B = 'B')) (c1 = (c2 = (c3 = 'c'))) => {|v| v.matched.to_string()};
-/// }
-///
-/// // example generation
-/// mod matchers {
-/// 	pub mod abc_captures {
-///			pub type Root<'a> = &'a str;
-/// 	}
-/// 	pub mod cap_captures {
-/// 		#[derive(Debug, PartialEq)]
-/// 		pub struct Cap1<'a> {
-/// 			pub matched: &'a str,
-/// 			pub a: &'a str,
-/// 			pub b: Cap2<'a>,
-/// 			pub c1: Cap3<'a>,
-/// 		}
-/// 		#[derive(Debug, PartialEq)]
-/// 		pub enum Cap2<'a> {
-/// 			None,
-/// 			B(&'a str),
-/// 		}
-/// 		#[derive(Debug, PartialEq)]
-/// 		pub struct Cap3<'a> {
-/// 			pub matched: &'a str,
-/// 			pub c2: Cap4<'a>,
-/// 		}
-/// 		#[derive(Debug, PartialEq)]
-/// 		pub struct Cap4<'a> {
-/// 			pub matched: &'a str,
-/// 			pub c3: &'a str,
-/// 		}
-/// 		pub mod Cap1_types {
-/// 			pub type b<'a> = Cap2<'a>;
-/// 			pub type c<'a> = Cap3<'a>;
-/// 			pub use c1_types = Cap3_types;
-/// 		}
-/// 		pub mod Cap3_types {
-/// 			pub type c2<'a> = Cap4<'a>;
-/// 		}
-/// 		pub type Root<'a> = String;
-/// 		pub type RootCap<'a> = Cap1<'a>;
-/// 		pub use Cap1_types as root_types;
-/// 	}
-/// }
-/// ```
 pub use gramex_macro::gramex;
 
 /// create a [`Matcher`] from an inline [expression](docs::gram_ref).
@@ -309,12 +261,14 @@ pub use gramex_macro::matcher;
 /// 	fn slice(&self, range: std::ops::Range<usize>) -> Tokens<'_> {
 /// 		Tokens(&self.0[range])
 /// 	}
-/// 	fn skip_1(&self, ind: &mut usize, _status: &gramex::MatchStatus) -> gramex::MatchSignal {
-/// 		if *ind + 1 > self.0.len() {
-/// 			MatchSignal::InComplete
+/// 	fn get_n(
+///			&self, ind: &mut usize, n: usize, _status: &gramex::MatchStatus,
+///		) -> Result<Tokens<'_>, MatchSignal> {
+/// 		if *ind + n > self.0.len() {
+/// 			Err(MatchSignal::InComplete)
 /// 		} else {
-/// 			*ind += 1;
-/// 			MatchSignal::Matched
+/// 			*ind += n;
+/// 			Ok(Tokens(&self.0[*ind - n..*ind]))
 /// 		}
 /// 	}
 /// }
@@ -326,16 +280,31 @@ pub trait MatchAble {
 	type Slice<'a>
 	where
 		Self: 'a;
-	/// the length of the matchable token stream
+	/// the length of the matchable token stream.
 	fn len(&self) -> usize;
-	/// slice the matchable
+	/// slice the matchable.
 	///
 	/// the slice type shape is left to the implementer (by reference or by value), not the type itself.
 	fn slice(&self, range: Range<usize>) -> Self::Slice<'_>;
-	/// skip one token
+	/// get a slice of n tokens from the matchable.
 	///
-	/// necessary for some types like `str` where a token (`char`) can span multiple indicies
-	fn skip_1(&self, ind: &mut usize, status: &MatchStatus) -> MatchSignal;
+	/// return a [`Result`] of [`MatchAble::Slice`] and advance the index to the start of the next token if matched, else return a [`MatchSignal`].
+	///
+	/// necessary for some types (like [`str`]`) that doesnt have uniform token size.
+	///
+	/// has a default implementation for 1 sized tokens.
+	fn get_n(
+		&self, ind: &mut usize, n: usize, status: &MatchStatus,
+	) -> Result<Self::Slice<'_>, MatchSignal> {
+		// ignore status
+		let _ = status;
+		if *ind + n > self.len() {
+			Err(MatchSignal::InComplete)
+		} else {
+			*ind += n;
+			Ok(self.slice(*ind - n..*ind))
+		}
+	}
 }
 /// handle matching by a specific type
 ///
@@ -502,11 +471,20 @@ where
 	}
 }
 
-pub fn by<T: MatchAble + ?Sized, F: Fn(&T, &mut usize, &MatchStatus) -> MatchSignal>(
-	matcher: F,
-) -> F {
-	matcher
+/// check if a [`MatchAble`] matches against a [`Matcher`].
+///
+/// like [`matches!`] but normal fn not macro.
+///
+/// # example
+/// ```
+/// assert!(matches("abc", matcher_for("abc")));
+/// ```
+pub fn matches<T: MatchAble + ?Sized>(value: &T, matcher: impl Matcher<T>) -> bool {
+	let mut ind = 0;
+	let sig = matcher.do_match(value, &mut ind, &MatchStatus::default());
+	if ind != value.len() { false } else { sig == MatchSignal::Matched }
 }
+
 #[doc(hidden)]
 pub mod __private {
 	/// map block type inference support

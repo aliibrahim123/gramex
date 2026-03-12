@@ -13,13 +13,17 @@ impl MatchAble for str {
 		&self[range]
 	}
 	#[inline]
-	fn skip_1(&self, ind: &mut usize, _status: &MatchStatus) -> MatchSignal {
-		if let Some(cur_char) = self[*ind..].chars().next() {
-			*ind += cur_char.len_utf8();
-			MatchSignal::Matched
-		} else {
-			MatchSignal::InComplete
+	fn get_n(&self, ind: &mut usize, n: usize, _status: &MatchStatus) -> Result<&str, MatchSignal> {
+		let mut chars = self[*ind..].char_indices();
+		let start = *ind;
+		// ensure the end char
+		if chars.nth(n - 1).is_none() {
+			return Err(MatchSignal::InComplete);
 		}
+
+		let end = chars.next().map(|(i, _)| i + start).unwrap_or(self.len());
+		*ind = end;
+		Ok(&self[start..end])
 	}
 }
 
