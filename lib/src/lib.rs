@@ -288,9 +288,9 @@ pub trait MatchAble {
 	fn slice(&self, range: Range<usize>) -> Self::Slice<'_>;
 	/// get a slice of n tokens from the matchable.
 	///
-	/// return a [`Result`] of [`MatchAble::Slice`] and advance the index to the start of the next token if matched, else return a [`MatchSignal`].
+	/// return a [`Result`] of [`MatchAble::Slice`] and advance the index to the next token if matched, else return a [`MatchSignal`].
 	///
-	/// necessary for some types (like [`str`]`) that doesnt have uniform token size.
+	/// necessary for some types (like `str`) that doesnt have uniform token size.
 	///
 	/// has a default implementation for 1 sized tokens.
 	fn get_n(

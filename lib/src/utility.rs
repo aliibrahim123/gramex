@@ -11,6 +11,7 @@ use crate::{MatchError, matcher};
 /// ```
 /// assert!(matches("abc", matcher_for("abc")));
 /// ```
+#[inline]
 pub fn matcher_for<'a, T: MatchAble + ?Sized, M: ?Sized>(matching: &'a M) -> impl Matcher<T>
 where
 	T: MatchBy<&'a M>,
@@ -47,6 +48,7 @@ pub fn consume<'a, T: MatchAble + ?Sized>(
 /// assert!(matches!("": str, {|v: &str, i: &mut usize, s: &MatchStatus| MatchSignal::Matched}));
 /// assert!(matches!("": str, {by(|v, i, s| MatchSignal::Matched)}));
 /// ```
+#[inline]
 pub fn by<T: MatchAble + ?Sized, F: Fn(&T, &mut usize, &MatchStatus) -> MatchSignal>(
 	matcher: F,
 ) -> F {
@@ -63,6 +65,7 @@ pub fn by<T: MatchAble + ?Sized, F: Fn(&T, &mut usize, &MatchStatus) -> MatchSig
 /// ```
 /// assert!(matches!("abc": str, {test(|v, _, _| v.starts_with('a'))} _+));
 /// ```
+#[inline]
 pub fn test<T: MatchAble + ?Sized>(
 	predicate: impl Fn(&T, &mut usize, &MatchStatus) -> bool,
 ) -> impl Matcher<T> {
@@ -79,6 +82,7 @@ pub fn test<T: MatchAble + ?Sized>(
 /// ```
 /// assert!(matches!("abc": str, {touch(|v, i, _| println!("{}", v[i..]))} _+));
 /// ```
+#[inline]
 pub fn touch<T: MatchAble + ?Sized>(fun: impl Fn(&T, &mut usize, &MatchStatus)) -> impl Matcher<T> {
 	move |v, i, s| {
 		fun(v, i, s);
@@ -94,6 +98,7 @@ pub fn touch<T: MatchAble + ?Sized>(fun: impl Fn(&T, &mut usize, &MatchStatus)) 
 /// ```
 /// assert!(matches!("abc": str, {a(|v| v.chars().all(char::is_lowercase))}[3]));
 /// ```
+#[inline]
 pub fn a<T: MatchAble + ?Sized>(predicate: impl Fn(T::Slice<'_>) -> bool) -> impl Matcher<T> {
 	move |v, i, s| {
 		let slice = match v.get_n(i, 1, s) {
@@ -109,7 +114,7 @@ pub fn a<T: MatchAble + ?Sized>(predicate: impl Fn(T::Slice<'_>) -> bool) -> imp
 ///
 /// # example
 /// ```
-/// assert!(matches!("abc": str, {an(3, |v| v.chars().all(char::is_lowercase))}));
+/// assert!(matches("abc", an(3, |v| v.chars().all(char::is_lowercase))));
 /// ```
 pub fn an<T: MatchAble + ?Sized>(
 	n: usize, predicate: impl Fn(T::Slice<'_>) -> bool,
