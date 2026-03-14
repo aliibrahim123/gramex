@@ -116,6 +116,7 @@ pub fn a<T: MatchAble + ?Sized>(predicate: impl Fn(T::Slice<'_>) -> bool) -> imp
 /// ```
 /// assert!(matches("abc", an(3, |v| v.chars().all(char::is_lowercase))));
 /// ```
+#[inline]
 pub fn an<T: MatchAble + ?Sized>(
 	n: usize, predicate: impl Fn(T::Slice<'_>) -> bool,
 ) -> impl Matcher<T> {
@@ -126,4 +127,86 @@ pub fn an<T: MatchAble + ?Sized>(
 		};
 		if predicate(slice) { MatchSignal::Matched } else { MatchSignal::MisMatched }
 	}
+}
+
+/// matches a `sep` separated list of `item`.
+///
+/// `list` is a [parameterized matcher](crate::docs::glossary#parameterized-matcher), it try to match the `item` list until it fails.
+///
+/// starting / terminated `sep` are not matched.
+///
+/// # example
+/// ```
+/// assert!(matches!("a,b,c": str, list<lower, ','>));
+/// assert!(matches!("1-2-3-": str, list<dec, '-'> ','?));
+/// ```
+#[inline]
+pub fn list<T: MatchAble + ?Sized>(
+	value: &T, item: impl Matcher<T>, sep: impl Matcher<T>, ind: &mut usize, status: &MatchStatus,
+) -> MatchSignal {
+	let mut is_first = true;
+	loop {
+		let start_ind = *ind;
+		if !is_first {
+			if sep.do_match(value, ind, status) != MatchSignal::Matched {
+				*ind = start_ind;
+				return MatchSignal::Matched;
+			}
+		}
+		if item.do_match(value, ind, status) != MatchSignal::Matched {
+			*ind = start_ind;
+			return MatchSignal::Matched;
+		}
+		is_first = false;
+	}
+}
+
+/// matches the end of the input.
+///
+/// the inverse of [`_`](crate::docs::gram_ref#any-_).
+///
+/// # example
+/// ```
+/// assert!(matches!("abc": str, !~eof {test(|v, i, _| v[*i..] == "abc")} _+));
+/// ```
+#[inline]
+pub fn eof<T: MatchAble + ?Sized>(value: &T, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
+	let _ = status;
+	if *ind == value.len() { MatchSignal::Matched } else { MatchSignal::InComplete }
+}
+
+/// matches nothing.
+///
+/// # example
+/// ```
+/// assert!(matches!("abc": str, 'a' noop 'b' noop 'c'));
+/// ```
+#[inline]
+pub fn noop<T: MatchAble + ?Sized>(
+	value: &T, ind: &mut usize, status: &MatchStatus,
+) -> MatchSignal {
+	let _ = (value, ind, status);
+	MatchSignal::Matched
+}
+
+/// always fail with [`MatchSignal::MisMatched`].
+#[inline]
+pub fn fail<T: MatchAble + ?Sized>(
+	value: &T, ind: &mut usize, status: &MatchStatus,
+) -> MatchSignal {
+	let _ = (value, ind, status);
+	MatchSignal::MisMatched
+}
+
+/// always fail with a custom [`MatchSignal::Error`] message.
+///
+/// append `at {index}` to the message where `index` is the current index.
+///
+/// # example
+/// ```
+/// assert!(try_match!("abc": str, 'a' {fail_with("example error")}).unwrap_err().msg == "example error at 1")
+/// ```
+#[inline]
+pub fn fail_with<T: MatchAble + ?Sized>(msg: &str) -> impl Matcher<T> {
+	move |_, ind, _| MatchSignal::Error(format!("{msg} at {ind}"))
 }

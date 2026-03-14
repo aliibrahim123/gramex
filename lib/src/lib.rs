@@ -246,6 +246,8 @@ pub use gramex_macro::matcher;
 ///
 /// it views the implementing type as a stream of tokens that can be sliced and accessed randomly.
 ///
+/// tokens doesnt need to be uniformally sized.
+///
 /// # example for custom types
 /// ```
 /// enum Token {
@@ -446,6 +448,8 @@ impl<T> From<MatchResult<T>> for MatchSignal {
 /// if it succeeded, it advance the index to the next token and return [`MatchSignal::Matched`].
 ///
 /// else, it advance the index to where the match failed and return one of the [`MatchSignal`] error variants.
+///
+/// every [`MatchAble`] implement [`MatchBy`] for `Matcher`.
 ///
 /// # example
 /// ```

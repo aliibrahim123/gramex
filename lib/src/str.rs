@@ -1,3 +1,18 @@
+//! # [`str`] implementation
+//! [`str`] implements [`MatchAble`] where the tokens are the characters in the string, index by byte position.
+//!
+//! [`str`] implements [`MatchBy`] for [`char`], [`&str`](str), [`&char`](char), [`&String`](String), [`&Box<str>`](Box<str>), and [`&Cow<'a, str>`](Cow<str>).
+//!
+//! it also implements range matching for [`char`].
+//!
+//! # example
+//! ```
+//! assert!(matches!("abc": str, 'a' 'b' 'c'));
+//! assert!(matches!("abc": str, "abc"));
+//! assert!(matches!("abc": str, 'a'..'z' {&String::from("b
+//! c")}));
+//! ```
+
 use std::{borrow::Cow, ops::RangeInclusive};
 
 use crate::{MatchAble, MatchBy, MatchSignal, MatchStatus, Matcher};

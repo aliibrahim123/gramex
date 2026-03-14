@@ -47,8 +47,8 @@
 //! static PAT2: &str = "c";
 //! assert!(matches!("abc": str, PAT1 example::PAT PAT2));
 //! ```
-//! #### Skip (`_`)
-//! Skips a single token. Under the hood, this calls [`MatchAble::skip_1`](crate::MatchAble::skip_1).
+//! #### any (`_`)
+//! matches any single token. Under the hood, this calls [`MatchAble::skip_1`](crate::MatchAble::skip_1).
 //! #### Block
 //! A [block expression](https://doc.rust-lang.org/stable/reference/expressions/block-expr.html) that resolves to a matching value. It is evaluated on each iteration.
 //! ```rust
