@@ -13,3 +13,4 @@ doctest = false
 
 [dependencies]
 gramex-macro = { version = "0.1.0", path = "../macro" }
+paste = "1.0.15"

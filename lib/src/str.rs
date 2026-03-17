@@ -9,9 +9,10 @@
 //! ```
 //! assert!(matches!("abc": str, 'a' 'b' 'c'));
 //! assert!(matches!("abc": str, "abc"));
-//! assert!(matches!("abc": str, 'a'..'z' {&String::from("b
-//! c")}));
+//! assert!(matches!("abc": str, 'a'..'z' {&String::from("bc")}));
 //! ```
+//!
+//! this module also export common and standared patterns like [`lower`] and [`alpha`].
 
 use std::{borrow::Cow, ops::RangeInclusive};
 
@@ -29,16 +30,16 @@ impl MatchAble for str {
 	}
 	#[inline]
 	fn get_n(&self, ind: &mut usize, n: usize, _status: &MatchStatus) -> Result<&str, MatchSignal> {
-		let mut chars = self[*ind..].char_indices();
-		let start = *ind;
-		// ensure the end char
+		let tail = &self[*ind..];
+		let mut chars = tail.chars();
+
 		if chars.nth(n - 1).is_none() {
 			return Err(MatchSignal::InComplete);
 		}
 
-		let end = chars.next().map(|(i, _)| i + start).unwrap_or(self.len());
-		*ind = end;
-		Ok(&self[start..end])
+		let offset = tail.len() - chars.as_str().len();
+		*ind += offset;
+		Ok(unsafe { tail.get_unchecked(..offset) })
 	}
 }
 

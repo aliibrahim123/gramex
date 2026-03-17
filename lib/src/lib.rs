@@ -52,6 +52,7 @@
 //!
 use std::ops::Range;
 
+pub mod bits;
 pub mod str;
 mod utility;
 pub use utility::*;
@@ -68,7 +69,7 @@ pub mod docs {
 ///
 /// captures are not allowed in `expr`, local variables can be used inside it.
 ///
-/// returns `bool` if matches.
+/// can pass any type implementing [`AsRef<type>`] by ref or value, returns `true` if matches.
 ///
 /// # example
 /// ```
@@ -85,6 +86,8 @@ pub use gramex_macro::matches;
 /// its syntax is `try_match!(value: type, expr)`, where `value` is an expression evaluating to a [`MatchAble`], `type` specify the [`MatchAble`] type and `expr` is the grammer expression to match against.
 ///
 /// captures are allowed in `expr`, local variables can be used inside it.
+///
+/// can pass any type implementing [`AsRef<type>`] by ref or value.
 ///
 /// returns [`MatchResult`] of an implicit root capture type if there is captures, else [`MatchAble::Slice`] spanning all the input.
 ///
@@ -275,6 +278,9 @@ pub use gramex_macro::matcher;
 /// 	}
 /// }
 /// ```
+///
+/// # note
+/// my need to implement [`AsRef<Self>`] for `Self` to use inside [`matches!`] and [`try_match!`].
 pub trait MatchAble {
 	/// the type returned by [`MatchAble::slice`].
 	///
@@ -283,10 +289,22 @@ pub trait MatchAble {
 	where
 		Self: 'a;
 	/// the length of the matchable token stream.
+	///
+	/// # example
+	/// ```
+	/// let tokens = Tokens(&[Token::Nb(123), Token::Ident("abc".to_string()), Token::Nb(456)]);
+	/// assert_eq!(tokens.len(), 3);
+	/// ```
 	fn len(&self) -> usize;
 	/// slice the matchable.
 	///
 	/// the slice type shape is left to the implementer (by reference or by value), not the type itself.
+	///
+	/// # example
+	/// ```
+	/// let tokens = Tokens(&[Token::Nb(123), Token::Ident("abc".to_string()), Token::Nb(456)]);
+	/// assert_eq!(tokens.slice(1..3), Tokens(&[Token::Ident("abc".to_string()), Token::Nb(456)]));
+	/// ```
 	fn slice(&self, range: Range<usize>) -> Self::Slice<'_>;
 	/// get a slice of n tokens from the matchable.
 	///
@@ -295,6 +313,13 @@ pub trait MatchAble {
 	/// necessary for some types (like `str`) that doesnt have uniform token size.
 	///
 	/// has a default implementation for 1 sized tokens.
+	///
+	/// # example
+	/// ```
+	/// let tokens = Tokens(&[Token::Nb(123), Token::Ident("abc".to_string()), Token::Nb(456)]);
+	/// assert_eq!(tokens.get_n(&mut 0, 1, &MatchStatus::default()), Ok(Tokens(&[Token::Nb(123)])));
+	/// ```
+	#[inline]
 	fn get_n(
 		&self, ind: &mut usize, n: usize, status: &MatchStatus,
 	) -> Result<Self::Slice<'_>, MatchSignal> {
@@ -305,6 +330,24 @@ pub trait MatchAble {
 		} else {
 			*ind += n;
 			Ok(self.slice(*ind - n..*ind))
+		}
+	}
+	/// skip n tokens from the matchable.
+	///
+	/// has a default implementation that calls [`MatchAble::get_n`] and ignore the result.
+	///
+	/// # example
+	/// ```
+	/// let tokens = Tokens(&[Token::Nb(123), Token::Ident("abc".to_string()), Token::Nb(456)]);
+	/// let mut ind = 0;
+	/// tokens.skip_n(&mut ind, 1, &MatchStatus::default());
+	/// assert_eq!(ind, 1);
+	/// ```
+	#[inline]
+	fn skip_n(&self, ind: &mut usize, n: usize, status: &MatchStatus) -> MatchSignal {
+		match self.get_n(ind, n, status) {
+			Ok(_) => MatchSignal::Matched,
+			Err(sig) => sig,
 		}
 	}
 }

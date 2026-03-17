@@ -48,7 +48,9 @@ enum CapTree<'a> {
 
 fn test_capture_term<'a>(expr: &Expr, terms: &'a [Term]) -> CaptureNodeKind<'a> {
 	// a parentless path atom named after a term
-	let Expr::Unit { atom: Atom::Path(path), .. } = expr else { return CaptureNodeKind::Normal };
+	let Expr::Unit { atom: Atom::Path(path), repetition: Repetition::ONCE, .. } = expr else {
+		return CaptureNodeKind::Normal;
+	};
 	let Some(ident) = path.get_ident() else { return CaptureNodeKind::Normal };
 	let Some(term) = terms.iter().find(|t| t.name == *ident) else {
 		return CaptureNodeKind::Normal;

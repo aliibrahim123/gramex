@@ -6,9 +6,10 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{ToTokens, TokenStreamExt, format_ident, quote};
 use syn::{
-	Ident,
+	Ident, Lifetime,
 	parse::{ParseBuffer, Parser},
 	parse_macro_input,
+	visit_mut::{self, VisitMut},
 };
 
 use crate::{
@@ -55,7 +56,7 @@ macro_rules! parse_input {
 
 #[proc_macro]
 pub fn try_match(input: TokenStream) -> TokenStream {
-	let MatcherExpr { expr, matched_type, value } =
+	let MatcherExpr { expr, mut matched_type, value } =
 		parse_input!(input with |input| parse_matcher_expr(input, true));
 	let cap_mod = Ident::new("captures", Span::call_site());
 	let mod_def =
@@ -63,18 +64,18 @@ pub fn try_match(input: TokenStream) -> TokenStream {
 
 	let mut ctx = Ctx { captures_mod: &cap_mod, match_target: &matched_type, mat_label_id: 0 };
 	let matcher = gen_matcher_expr(&expr, &mut ctx);
+	DashifyLife.visit_type_mut(&mut matched_type);
 
-	quote! { {
-		let _value = #value;
+	quote! { match <_ as AsRef<#matched_type>>::as_ref(&#value) { _value => {
 		#[allow(unused, nonstandard_style)] let res = 'mat_0: { #mod_def #matcher };
 		res
-	} }
+	} } }
 	.into()
 }
 
 #[proc_macro]
 pub fn matches(input: TokenStream) -> TokenStream {
-	let MatcherExpr { expr, matched_type, value } =
+	let MatcherExpr { expr, mut matched_type, value } =
 		parse_input!(input with |input| parse_matcher_expr(input, false));
 
 	if let Err(err) = find_unallowed_capture(&expr) {
@@ -84,15 +85,15 @@ pub fn matches(input: TokenStream) -> TokenStream {
 	let ident = Ident::new("how_did_i_get_here", Span::call_site());
 	let mut ctx = Ctx { captures_mod: &ident, match_target: &matched_type, mat_label_id: 0 };
 	let matcher = gen_expr(&expr, &mut ctx);
+	DashifyLife.visit_type_mut(&mut matched_type);
 
-	quote! { {
-		let _value = #value;
+	quote! { match <_ as AsRef<#matched_type>>::as_ref(&#value) { _value => {
 		let ind = &mut 0;
 		let status = &mut ::gramex::MatchStatus::default();
 		#[allow(unused, nonstandard_style)] let res = #matcher;
 		if *ind != <_ as ::gramex::MatchAble>::len(_value) { false }
 		else { res == ::gramex::MatchSignal::Matched }
-	} }
+	} } }
 	.into()
 }
 #[proc_macro]
@@ -114,4 +115,15 @@ pub fn matcher(input: TokenStream) -> TokenStream {
 		}
 	} }
 	.into()
+}
+/// convert 'a to '_ in types
+struct DashifyLife;
+
+impl VisitMut for DashifyLife {
+	fn visit_lifetime_mut(&mut self, i: &mut Lifetime) {
+		if i.ident != "static" {
+			i.ident = Ident::new("_", i.ident.span());
+		}
+		visit_mut::visit_lifetime_mut(self, i);
+	}
 }

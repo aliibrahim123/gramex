@@ -121,10 +121,7 @@ fn gen_unit(unit: &Expr, ctx: &mut Ctx) -> TokenStream {
 
 	if repetition.0 == repetition.1 && matches!(atom, Atom::Any) && !not {
 		let count = repetition.0 as usize;
-		let matcher = quote! { match <_ as ::gramex::MatchAble>::get_n(_value, ind, #count, status) {
-			Ok(_) => ::gramex::MatchSignal::Matched,
-			Err(sig) => sig,
-		} };
+		let matcher = quote! { <_ as ::gramex::MatchAble>::skip_n(_value, ind, #count, status) };
 		return if *near {
 			quote! {{
 				let ind = &mut *ind.clone();
@@ -152,7 +149,9 @@ fn gen_unit(unit: &Expr, ctx: &mut Ctx) -> TokenStream {
 			::gramex::MatchSignal::InComplete if *real_ind == ::gramex::MatchAble::len(_value) =>
 				::gramex::MatchSignal::InComplete,
 			::gramex::MatchSignal::Matched => ::gramex::MatchSignal::MisMatched,
-			_ => { *real_ind += 1; ::gramex::MatchSignal::Matched },
+			_ => {
+				<_ as ::gramex::MatchAble>::skip_n(_value, real_ind, 1, status); ::gramex::MatchSignal::Matched
+			},
 		} };
 		gen_rep(repetition, gen_forked_match(matcher, mapper), ctx)
 	} else {
@@ -230,7 +229,9 @@ fn gen_and(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 		let start_ind = *ind;
 		let sig = #primary_matcher;
 		if sig != ::gramex::MatchSignal::Matched { break #mat_lab sig }
+		use std::borrow::Borrow;
 		let _value = <_ as ::gramex::MatchAble>::slice(_value, 0..*ind);
+		let _value = _value.borrow();
 	};
 
 	for expr in &exprs[1..] {
