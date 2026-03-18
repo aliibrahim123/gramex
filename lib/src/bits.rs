@@ -336,7 +336,7 @@ impl TryFrom<&[u8]> for Bits {
 			return Err(BitOverflowError { target_len: 64, value_len: value.len() * 8 });
 		}
 		let mut buf = [0u8; 8];
-		buf[..value.len()].copy_from_slice(&value);
+		buf[..value.len()].copy_from_slice(value);
 		Ok(Bits { value: u64::from_le_bytes(buf), len: value.len() * 8 })
 	}
 }
@@ -352,7 +352,7 @@ impl TryFrom<&[u8]> for LBits {
 			return Err(BitOverflowError { target_len: 64, value_len: value.len() * 8 });
 		}
 		let mut buf = [0u8; 8];
-		buf[..value.len()].copy_from_slice(&value);
+		buf[..value.len()].copy_from_slice(value);
 		Ok(LBits { value: u64::from_le_bytes(buf), len: value.len() * 8 })
 	}
 }

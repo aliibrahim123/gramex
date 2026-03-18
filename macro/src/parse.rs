@@ -7,7 +7,7 @@ use syn::{
 	parse::{ParseBuffer, discouraged::Speculative},
 	punctuated::Punctuated,
 	spanned::Spanned,
-	token::{Brace, Bracket, Paren, Token},
+	token::{Brace, Bracket, Paren},
 };
 
 use crate::gen_types::CaptureInfo;
@@ -212,14 +212,14 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 
 	if let Expr::Imply { expr, .. } = expr.as_mut() {
 		let imply_expr = std::mem::replace(expr, Box::new(dummy_expr()));
-		*expr = Box::new(Expr::Capture {
+		**expr = Expr::Capture {
 			ident: Ident::new("cap", Span::call_site()),
 			rep: Repetition::ONCE,
 			ty: None,
 			conv: None,
 			type_info: Box::default(),
 			expr: imply_expr,
-		});
+		};
 	}
 
 	Ok(Some(Expr::Capture { ident, rep, ty, conv, type_info: Box::default(), expr }))

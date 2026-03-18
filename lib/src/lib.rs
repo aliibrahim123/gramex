@@ -53,6 +53,7 @@
 //! - [grammer reference](`docs::gram_ref`): documenting the grammer language syntax and its behaviours.
 //! - [glossary](`docs::glossary`): glossary of terms and concepts.
 //!
+#![allow(clippy::tabs_in_doc_comments)]
 use std::ops::Range;
 
 pub mod bits;
@@ -198,10 +199,10 @@ pub use gramex_macro::try_match;
 /// the term get generated into 3 functions:
 /// - `fn name(value: &type, ...args, ind: &mut usize, status: &MatchStatus) -> MatchSignal`: a [`Matcher`] with the original name that doesnt capture.
 /// - `fn capture_{name}(value: &type, ...args, ind: &mut usize, status: &MatchStatus) -> MatchResult<CapType>`: a [capturing function](docs::glossary#capturing-function) that match with capturing.    
-/// it returns a [`MatchResult`] of the implicit root capture type if there is captures, else [`MatchAble::Slice`] spanning the matched input.
+///   it returns a [`MatchResult`] of the implicit root capture type if there is captures, else [`MatchAble::Slice`] spanning the matched input.
 /// - `fn match_{name}(value: &type, ...args) -> MatchResult<CapType>`: a function that matches with capturing the whole input.   
-/// it returns the same as `capture_{name}`, but fail on excess input.     
-/// usefull when the term is the root pattern.
+///   it returns the same as `capture_{name}`, but fail on excess input.     
+///   usefull when the term is the root pattern.
 /// ```
 /// gramex! {
 /// 	mod matchers for str;
@@ -284,6 +285,7 @@ pub use gramex_macro::matcher;
 ///
 /// # note
 /// my need to implement [`AsRef<Self>`] for `Self` to use inside [`matches!`] and [`try_match!`].
+#[allow(clippy::len_without_is_empty)]
 pub trait MatchAble {
 	/// the type returned by [`MatchAble::slice`].
 	///

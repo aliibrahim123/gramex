@@ -361,6 +361,7 @@ pub fn ascii_punct(value: &str, ind: &mut usize, status: &MatchStatus) -> MatchS
 /// assert!(matches!("123": str, dec[3]));
 /// ```
 #[inline]
+#[allow(clippy::manual_is_ascii_check)]
 pub fn dec(value: &str, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
 	_ = status;
 	match_char!(value, ind, char => matches!(char, '0'..='9'))
@@ -374,6 +375,7 @@ pub fn dec(value: &str, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
 /// assert!(matches!("1aF": str, hex[3]));
 /// ```
 #[inline]
+#[allow(clippy::manual_is_ascii_check)]
 pub fn hex(value: &str, ind: &mut usize, status: &MatchStatus) -> MatchSignal {
 	_ = status;
 	match_char!(value, ind, char => matches!(char, '0'..='9' | 'a'..='f' | 'A'..='F'))

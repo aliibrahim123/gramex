@@ -12,11 +12,10 @@ use crate::{MatchError, matcher};
 /// assert!(matches("abc", matcher_for("abc")));
 /// ```
 #[inline]
-pub fn matcher_for<'a, T: MatchAble + ?Sized, M: ?Sized>(matching: &'a M) -> impl Matcher<T>
-where
-	T: MatchBy<&'a M>,
-{
-	move |v, i, s| v.match_by(&matching, i, s)
+pub fn matcher_for<'a, T: MatchAble + ?Sized + MatchBy<&'a M>, M: ?Sized>(
+	matching: &'a M,
+) -> impl Matcher<T> {
+	move |v, i, s| v.match_by(matching, i, s)
 }
 
 /// matches a [`MatchAble`] and return the matched and remaining sections.
@@ -147,11 +146,9 @@ pub fn list<T: MatchAble + ?Sized>(
 	let mut is_first = true;
 	loop {
 		let start_ind = *ind;
-		if !is_first {
-			if sep.do_match(value, ind, status) != MatchSignal::Matched {
-				*ind = start_ind;
-				return MatchSignal::Matched;
-			}
+		if !is_first && sep.do_match(value, ind, status) != MatchSignal::Matched {
+			*ind = start_ind;
+			return MatchSignal::Matched;
 		}
 		if item.do_match(value, ind, status) != MatchSignal::Matched {
 			*ind = start_ind;
