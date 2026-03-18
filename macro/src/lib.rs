@@ -22,8 +22,10 @@ use crate::{
 #[proc_macro]
 pub fn gramex(input: TokenStream) -> TokenStream {
 	let mut module = parse_macro_input!(input with parse_gramex_macro);
-	let mut mod_def = resolve_types_macro(&mut module).unwrap_or_else(|e| e.to_compile_error());
-
+	let mut mod_def = match resolve_types_macro(&mut module) {
+		Ok(mod_def) => mod_def,
+		Err(err) => return err.to_compile_error().into(),
+	};
 	let GramexMacro { matched_type, mod_name, use_decls, mod_vis, terms } = module;
 	for term in &terms {
 		let captures_mod = &format_ident!("{}_captures", term.name);
@@ -59,8 +61,10 @@ pub fn try_match(input: TokenStream) -> TokenStream {
 	let MatcherExpr { expr, mut matched_type, value } =
 		parse_input!(input with |input| parse_matcher_expr(input, true));
 	let cap_mod = Ident::new("captures", Span::call_site());
-	let mod_def =
-		resolve_types_expr(&expr, &matched_type, &cap_mod).unwrap_or_else(|e| e.to_compile_error());
+	let mod_def = match resolve_types_expr(&expr, &matched_type, &cap_mod) {
+		Ok(mod_def) => mod_def,
+		Err(err) => return err.to_compile_error().into(),
+	};
 
 	let mut ctx = Ctx { captures_mod: &cap_mod, match_target: &matched_type, mat_label_id: 0 };
 	let matcher = gen_matcher_expr(&expr, &mut ctx);

@@ -25,6 +25,8 @@ enum CaptureNodeKind<'a> {
 	Term(Ident),
 	/// has inner captures inside a or expr
 	Enum { with_none: bool, nodes: Vec<CaptureNode<'a>> },
+	/// imply expr
+	Imply(Box<CaptureNode<'a>>),
 }
 /// node inside CapTree
 #[derive(Debug, Clone)]
@@ -44,6 +46,8 @@ enum CapTree<'a> {
 	},
 	/// seq / and expr of captures
 	Group(Vec<CaptureNode<'a>>),
+	/// imply expr
+	Imply(Box<CaptureNode<'a>>),
 }
 
 fn test_capture_term<'a>(expr: &Expr, terms: &'a [Term]) -> CaptureNodeKind<'a> {
@@ -63,13 +67,7 @@ fn flat_children<'a>(exprs: &'a [Expr], terms: &'a [Term]) -> syn::Result<Vec<Ca
 		match transform(expr, terms)? {
 			Some(CapTree::Group(nodes)) => children.extend(nodes),
 			Some(CapTree::Capture(node)) => children.push(node),
-			Some(CapTree::Enum { nodes, .. }) => {
-				let CaptureNode { expr: Expr::Capture { ident, .. }, .. } = &nodes[0] else {
-					unreachable!()
-				};
-				let msg = "capture inside an or expression not inside a capture";
-				return Err(Error::new(ident.span(), msg));
-			}
+			Some(_) => find_unallowed_capture(expr)?,
 			_ => continue,
 		}
 	}
@@ -89,10 +87,25 @@ fn transform<'a>(expr: &'a Expr, terms: &'a [Term]) -> syn::Result<Option<CapTre
 			}
 		}
 		Expr::Or(exprs) => {
-			let nodes = flat_children(exprs, terms)?;
+			let mut nodes = vec![];
+			for expr in exprs {
+				match transform(expr, terms)? {
+					Some(Capture(node)) => nodes.push(node),
+					Some(_) => raise_unallowed_capture(expr)?,
+					_ => continue,
+				}
+			}
 			match nodes.is_empty() {
 				true => None,
 				false => Some(Enum { with_none: exprs.len() != nodes.len(), nodes }),
+			}
+		}
+		Expr::Imply { cond, expr } => {
+			find_unallowed_capture(cond)?;
+			match transform(expr, terms)? {
+				Some(Capture(node)) => Some(Imply(Box::new(node))),
+				Some(_) => raise_unallowed_capture(expr)?,
+				_ => None,
 			}
 		}
 		cap @ Expr::Capture { rep, expr, .. } => {
@@ -107,6 +120,7 @@ fn transform<'a>(expr: &'a Expr, terms: &'a [Term]) -> syn::Result<Option<CapTre
 				Some(Group(nodes)) => Kind::Group(nodes),
 				Some(Enum { with_none, nodes }) => Kind::Enum { with_none, nodes },
 				Some(Capture(node)) => Kind::Group(vec![node]),
+				Some(Imply(expr)) => Kind::Imply(expr),
 				None => test_capture_term(expr, terms),
 			};
 			Some(Capture(CaptureNode { expr: cap, rep, kind }))
@@ -140,6 +154,10 @@ pub fn find_unallowed_capture(expr: &Expr) -> syn::Result<()> {
 				find_unallowed_capture(expr)?
 			}
 		}
+		Expr::Imply { cond, expr } => {
+			find_unallowed_capture(cond)?;
+			find_unallowed_capture(expr)?
+		}
 		Expr::Unit { atom, .. } => match atom {
 			Atom::Group(expr) => find_unallowed_capture(expr)?,
 			Atom::Call { args, .. } => {
@@ -153,6 +171,10 @@ pub fn find_unallowed_capture(expr: &Expr) -> syn::Result<()> {
 	};
 	Ok(())
 }
+fn raise_unallowed_capture<T>(expr: &Expr) -> syn::Result<T> {
+	find_unallowed_capture(expr)?;
+	unreachable!()
+}
 
 #[derive(Debug, Clone, Default)]
 pub enum CaptureKind {
@@ -165,6 +187,8 @@ pub enum CaptureKind {
 	Group(Vec<Ident>),
 	/// has inner captures inside an or
 	Enum { with_none: bool },
+	/// imply expr
+	Imply,
 }
 #[derive(Debug, Clone, Default)]
 pub struct CaptureInfo {
@@ -212,6 +236,24 @@ fn resolve_capture(
 			resolved,
 			has_type_map: false,
 			cap: CaptureInfo { kind, ..default() },
+		};
+	}
+	if let Imply(expr) = kind {
+		let ResolveResult { resolved: expr_type, cap, has_type_map, .. } =
+			resolve_capture(expr, matched_type, cap_defs, id_counter);
+		let Expr::Capture { type_info, .. } = expr.expr else { unreachable!() };
+		let type_name = cap.type_name.clone();
+		type_info.replace(cap);
+
+		let resolved = if let Some(ty) = ty {
+			write_rep(ty.as_ref(), *rep)
+		} else {
+			write_rep(quote! { Option<#expr_type> }, *rep)
+		};
+		return ResolveResult {
+			resolved,
+			has_type_map,
+			cap: CaptureInfo { kind: CaptureKind::Imply, enum_type: None, type_name },
 		};
 	}
 

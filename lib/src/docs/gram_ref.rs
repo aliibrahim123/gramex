@@ -14,9 +14,10 @@
 //! - **[`sequence`](#sequence)**: Matches a sequence of expressions.
 //! - **[`or`](#or)**: Matches exactly one of the given expressions.
 //! - **[`and`](#and)**: Matches multiple expressions against the exact same input.
+//! - **[`imply`](#imply)**: matches an expression if a codition expression matches.
 //! - **[`capture`](#capture)**: Matches a section and captures its value.
 //!
-//! **Precedence:** `capture` > `range` > `unit` > `and` > `sequence` > `or`.
+//! **Precedence:** `capture` > `range` > `unit` > `and` > `sequence` > `imply` > `or`.
 //!
 //! # Atoms
 //! ```text
@@ -206,6 +207,18 @@
 //! assert!(!matches!("abc": str, ('a'..'z')[3] & !"abc" & { touch(|_| print!("not reached") }));
 //! ```
 //!
+//! # Imply
+//! An imply expression (`cond -> expr`) is an expression that matches `expr` expression if a `cond` expression matches.
+//!
+//! it matches `expr` on the same input of `cond`, and matches nothing if `cond` fails.
+//!
+//! it has higher precedence than sequences and ands, but lower precedence than ors.
+//!
+//! ```
+//! assert!(matches!("abc123": str, alpha -> (alpha | dec)+));
+//! assert!(matches!("": str, alpha -> (alpha | dec)+));
+//! ```
+//!
 //! # Captures
 //! ```text
 //! (ident = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_')
@@ -252,6 +265,16 @@
 //!     let value = (ident = ident);
 //! }
 //! assert_eq!(match_value("abc").unwrap().ident, "abc");
+//! ```
+//!
+//! #### Imply
+//! Matches an imply expression, resolve to `None` if `cond` fails and `Some(type)` if `expr` matches, where `type` is the type of `expr`.
+//!
+//! inherit the type of `expr` in type maps.
+//!
+//! ```
+//! assert_eq(try_match("abc": str, 'a' (b = 'b' -> "bc")).unwrap().b, Some("bc"));
+//! assert_eq(try_match("a": str, 'a' (b = 'b' -> "bc")).unwrap().b, None);
 //! ```
 //!
 //! #### Structured

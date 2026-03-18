@@ -7,7 +7,7 @@ use syn::{
 	parse::{ParseBuffer, discouraged::Speculative},
 	punctuated::Punctuated,
 	spanned::Spanned,
-	token::{Brace, Bracket, Paren},
+	token::{Brace, Bracket, Paren, Token},
 };
 
 use crate::gen_types::CaptureInfo;
@@ -84,8 +84,14 @@ pub enum Expr {
 	///
 	/// **grammer**: `list<expr, '&'>`
 	And(Vec<Expr>),
+	/// matches `expr` if `cond` matches, else match nothing: `'a'..'z' -> ident`.
+	///
+	/// **grammer**: `expr -> expr`
+	Imply { cond: Box<Expr>, expr: Box<Expr> },
 }
-
+fn dummy_expr() -> Expr {
+	Expr::Unit { not: false, near: false, repetition: Repetition::ONCE, atom: Atom::Any }
+}
 macro_rules! try_parse {
 	($buf:ident, $($token:tt)+) => {
 		if $buf.peek($($token)+) {
@@ -197,11 +203,23 @@ fn try_parse_capture(buf: &ParseBuffer, flag_span: Option<Span>) -> syn::Result<
 	}
 
 	buf.parse::<Token![=]>()?;
-	let expr = Box::new(parse_expr(buf)?);
+	let mut expr = Box::new(parse_expr(buf)?);
 
 	let mut conv = None;
 	if try_parse!(buf, Token![=>]) {
 		conv = Some(Box::new(buf.parse::<Block>()?));
+	}
+
+	if let Expr::Imply { expr, .. } = expr.as_mut() {
+		let imply_expr = std::mem::replace(expr, Box::new(dummy_expr()));
+		*expr = Box::new(Expr::Capture {
+			ident: Ident::new("cap", Span::call_site()),
+			rep: Repetition::ONCE,
+			ty: None,
+			conv: None,
+			type_info: Box::default(),
+			expr: imply_expr,
+		});
 	}
 
 	Ok(Some(Expr::Capture { ident, rep, ty, conv, type_info: Box::default(), expr }))
@@ -250,14 +268,11 @@ fn at_expr_end(buf: &ParseBuffer) -> bool {
 	// the regular one like , and ;
 	// '>': at end of call atom
 	// '=': at end of capture before conv block
-	let is_comm = buf.peek(Token![,]);
-	is_comm || buf.peek(Token![;]) || buf.peek(Token![>]) || buf.peek(Token![=]) || buf.is_empty()
+	let is_comma = buf.peek(Token![,]);
+	is_comma || buf.peek(Token![;]) || buf.peek(Token![>]) || buf.peek(Token![=]) || buf.is_empty()
 }
 fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let expr = parse_expr_range(buf)?;
-	if buf.peek(Token![|]) || at_expr_end(buf) {
-		return Ok(expr);
-	}
 	if !buf.peek(Token![&]) {
 		return Ok(expr);
 	}
@@ -269,27 +284,32 @@ fn parse_expr_and(buf: &ParseBuffer) -> syn::Result<Expr> {
 }
 fn parse_expr_seq(buf: &ParseBuffer) -> syn::Result<Expr> {
 	let expr = parse_expr_and(buf)?;
-	if buf.peek(Token![|]) || at_expr_end(buf) {
+	if buf.peek(Token![|]) || buf.peek(Token![-]) || at_expr_end(buf) {
 		return Ok(expr);
 	}
 	let mut exprs = vec![expr];
-	while !(buf.peek(Token![|]) || at_expr_end(buf)) {
+	while !(buf.peek(Token![|]) || buf.peek(Token![-]) || at_expr_end(buf)) {
 		exprs.push(parse_expr_and(buf)?);
 	}
 	Ok(Expr::Seq(exprs))
 }
-
-pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
-	let expr = parse_expr_seq(buf)?;
-	if buf.peek(Token![&]) || at_expr_end(buf) {
-		return Ok(expr);
+fn parse_expr_imply(buf: &ParseBuffer) -> syn::Result<Expr> {
+	let expr1 = parse_expr_seq(buf)?;
+	if try_parse!(buf, Token![->]) {
+		let expr2 = parse_expr_seq(buf)?;
+		Ok(Expr::Imply { cond: Box::new(expr1), expr: Box::new(expr2) })
+	} else {
+		Ok(expr1)
 	}
+}
+pub fn parse_expr(buf: &ParseBuffer) -> syn::Result<Expr> {
+	let expr = parse_expr_imply(buf)?;
 	if !buf.peek(Token![|]) {
 		return Ok(expr);
 	}
 	let mut exprs = vec![expr];
 	while try_parse!(buf, Token![|]) {
-		exprs.push(parse_expr_seq(buf)?);
+		exprs.push(parse_expr_imply(buf)?);
 	}
 	Ok(Expr::Or(exprs))
 }

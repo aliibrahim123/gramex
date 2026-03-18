@@ -42,6 +42,9 @@
 //! assert!(matches!("b": str, 'a' | 'b' | 'c'));
 //! assert!(matches!("b": str, 'a'..'z' & !'c'));
 //!
+//! // `cond -> expr` matches `expr` if `cond` matches
+//! assert!(matches!("ad": str, 'a' ('b' -> "bc") 'd'));
+//!
 //! // capture are done using `(name = pattern)`
 //! assert!(try_match!("abc": str, 'a' (bc = "bc")).is_ok_and(|v| v.bc == "bc"));
 //! ```

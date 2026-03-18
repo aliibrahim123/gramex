@@ -245,6 +245,22 @@ fn gen_and(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 
 	quote! { #mat_lab: { #match_block; ::gramex::MatchSignal::Matched } }
 }
+fn gen_imply(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
+	let Expr::Imply { cond, expr } = expr else { unreachable!() };
+	let mat_lab = gen_label(&mut ctx.mat_label_id);
+	let cond_matcher = gen_expr(cond, ctx);
+	let main_matcher = gen_expr(expr, ctx);
+	quote! { #mat_lab: {
+		let real_ind = *ind;
+		let was_in_main_path = status.in_main_path;
+		status.in_main_path = false;
+		let sig = #cond_matcher;
+		status.in_main_path = was_in_main_path;
+		*ind = real_ind;
+		if sig != ::gramex::MatchSignal::Matched { break #mat_lab ::gramex::MatchSignal::Matched }
+		#main_matcher
+	} }
+}
 
 fn gen_capture(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 	let captures_mod = ctx.captures_mod;
@@ -266,7 +282,6 @@ fn gen_capture(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 			#matcher
 			let cap = <_ as ::gramex::MatchAble>::slice(_value, start_ind..*ind);
 		}),
-
 		CaptureKind::Term(term) => {
 			let term = format_ident!("capture_{term}");
 			match_block.append_all(quote! {
@@ -275,6 +290,11 @@ fn gen_capture(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 					err => break #mat_lab Into::<::gramex::MatchSignal>::into(err),
 				};
 			})
+		}
+		CaptureKind::Imply => {
+			match_block.append_all(quote! {
+				let mut cap_cap = None; #matcher let cap = cap_cap;
+			});
 		}
 		CaptureKind::Group(fields) => {
 			let mut struct_init = quote! {};
@@ -348,6 +368,7 @@ pub fn gen_expr(expr: &Expr, ctx: &mut Ctx) -> TokenStream {
 		Expr::Seq(_) => gen_seq(expr, ctx),
 		Expr::Or(_) => gen_or(expr, ctx),
 		Expr::And(_) => gen_and(expr, ctx),
+		Expr::Imply { .. } => gen_imply(expr, ctx),
 		Expr::Capture { .. } => gen_capture(expr, ctx),
 	}
 }
