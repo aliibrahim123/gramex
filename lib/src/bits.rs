@@ -649,7 +649,7 @@ macro_rules! w_macros {
 			#[doc(inline)]
 			#[doc = concat!("matches a ", $n, " byte section by a [`Bits`] [grammer expression](crate::docs::gram_ref).
 			
-this is a shortcut for `word(", $n, ", matcher!(for Bits, ...))`.")]
+this is a shortcut for [`word(", $n, ", matcher!(for Bits, ...))`](word).")]
 			pub use [<w $n>];
 
 			#[macro_export]
@@ -662,7 +662,7 @@ this is a shortcut for `word(", $n, ", matcher!(for Bits, ...))`.")]
 			#[doc(inline)]
 			#[doc = concat!("matches a ", $n, " byte section by a [`LBits`] [grammer expression](crate::docs::gram_ref).
 			
-this is a shortcut for `wordl(", $n, ", matcher!(for Bits, ...))`.")]
+this is a shortcut for [`wordl(", $n, ", matcher!(for Bits, ...))`](wordl).")]
 			pub use [<w $n l>];
 		)*}
 	};

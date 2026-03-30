@@ -4,7 +4,7 @@
 //! ```
 //! The `gramex` grammar syntax is inspired by standard metasyntax languages (notably **Wirth syntax notation (WSN)**) and regular expressions, but with a native Rust flavor.
 //!
-//! The `gramex` grammar works on a stream of tokens; this stream must implement the [`MatchAble`](`crate::MatchAble`) trait.
+//! The `gramex` grammar works on a stream of tokens, this stream must implement the [`MatchAble`](`crate::MatchAble`) trait.
 //!
 //! `gramex` is composed of expressions that define patterns to match against that stream.
 //!
@@ -25,7 +25,7 @@
 //! ident path::to::matcher list<alpha+, ','>
 //! { value.field } { |value, ind, status| ... } ( 'a' 'b' 'c' )
 //! ```
-//! Atoms are the fundamental units of the grammar; they perform the actual token-to-token matching.
+//! Atoms are the fundamental units of the grammar, they perform the actual token-to-token matching.
 //!
 //! Atoms primarily resolve into values for which the stream implements [`MatchBy`](crate::MatchBy).
 //!
@@ -45,8 +45,8 @@
 //!     pub const PAT: &str = "b";
 //! }
 //! static PAT1: &str = "a";
-//! static PAT2: &str = "c";
-//! assert!(matches!("abc": str, PAT1 example::PAT PAT2));
+//! let pat2 = "c";
+//! assert!(matches!("abc": str, PAT1 example::PAT pat2));
 //! ```
 //! #### any (`_`)
 //! matches any single token. Under the hood, this calls [`MatchAble::skip_1`](crate::MatchAble::skip_1).
@@ -77,12 +77,12 @@
 //! A unit is an [`atom`](#atom) combined with modifiers.
 //!
 //! ### Modifiers     
-//! Modifiers change the behavior of the matched atom; they are prefixed to the target atom.
+//! Modifiers are operators prefixed to the atom that change the behavior of it.
 //!
 //! #### Not (`!`)
 //! Matches exactly one token if the atom doesn't match.
 //!  
-//!  It always consumes exactly one token upon success, even if the negated pattern spans multiple tokens.
+//!  It consumes exactly one token upon success, even if the negated pattern spans multiple tokens.
 //!      
 //!  It will fail on incomplete input.
 //! ```rust
@@ -94,14 +94,14 @@
 //! #### Near (`~`)
 //! Matches an atom without advancing the stream.     
 //!  
-//! Can be prefixed with the `!` modifier to invert the result of the lookahead (which does not fail on incomplete input).
+//! Can be prefixed with the `!` modifier to invert the result of the lookahead (does not fail on incomplete input).
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("abc": str, ~'a' ~"abc" !~"dec" _[3]));
 //! ```
 //!
 //! ### Repetition      
-//! Repetition specifies how many times an atom should be matched, suffixed to the atom.
+//! Repetition are operators suffixed to the atom that specifies how many times it should be matched.
 //!
 //! #### Optional (`?`)
 //! Matches the atom 0 or 1 time.
@@ -133,7 +133,7 @@
 //! #### Range (`[min..max]`)
 //! Matches the atom between `min` and `max` (inclusive) times.
 //!
-//! `min` and `max` are optional; they default to `0` and infinity, respectively.     
+//! `min` and `max` are optional, they default to `0` and infinity, respectively.     
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("aaabbcccc": str, 'a'[2..4] 'b'[..3] 'c'[3..]));
@@ -144,14 +144,14 @@
 //!
 //! **Note**: `?` is `[0..1]`, `*` is `[0..]`, `+` is `[1..]`, and no repetition implies `[1]`.
 //!
-//! Unbounded repetition is greedy, stopping only at a mismatch or the end of input. You can use intersections (`&`) to control bounds.
+//! Unbounded repetition is greedy, stopping only at a mismatch or the end of input. You can ([`&` expression](#and)) to control the bounds.
 //! ```rust
 //! # use crate::*;
 //! // locate the end `abc` then slice it and run `"ab"*` on it
 //! assert!(matches!("ababababc": str, !"abc"* & "ab"* _[3]));
 //! ```
 //!
-//! With the `!` modifier, repetition takes precedence. With the `~` modifier, the `~` takes precedence.
+//! With the [`!`](#not) modifier, repetition takes precedence. With the [`~`](#near) modifier, the `~` takes precedence.
 //! ```rust
 //! # use crate::*;
 //! assert!(!matches!("bbc": str, !~'b'[3] ~'b'[2] !'a'[3]));
@@ -165,7 +165,7 @@
 //!
 //! `lh` and `rh` can be of different atom types but must resolve to the same underlying type.
 //!
-//! Range expressions resolve to [`RangeInclusive`].
+//! Range expressions resolve to [`RangeInclusive`](std::ops::RangeInclusive).
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("abc": str, 'a'..'z' !('0'..'9') (('a'..'z'))+));
@@ -180,11 +180,11 @@
 //! ```
 //!
 //! # Or
-//! An OR expression is a `|`-separated list of expressions that matches exactly one of them.
+//! An `or` expression is a `|`-separated list of expressions that matches exactly one of them.
 //!
 //! The first expression that matches wins, and the rest are ignored. If none match, the error returned is from the last expression evaluated.
 //!
-//! OR expressions have the lowest precedence, meaning they wrap all expressions until the next `|` or the end of the group.
+//! `or` expressions have the lowest precedence, meaning they wrap all expressions until the next `|` or the end of the group.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("a": str, 'a' | 'b' 'c' | "abc"));
@@ -195,11 +195,11 @@
 //! ```
 //!
 //! # And
-//! An AND expression is an `&`-separated list of expressions that matches all of them against the exact same input.
+//! An `and` expression is an `&`-separated list of expressions that matches all of them against the exact same input.
 //!
 //! The first expression specifies the bounded matched section. The rest of the expressions then match against that specific section, ignoring any excess input. The first failure wins.
 //!
-//! AND expressions have higher precedence than sequences.
+//! `and` expressions have higher precedence than sequences.
 //! ```rust
 //! # use crate::*;
 //! assert!(matches!("abc": str, ('a'..'z')[3] & ('a' _ _)));
@@ -208,11 +208,11 @@
 //! ```
 //!
 //! # Imply
-//! An imply expression (`cond -> expr`) is an expression that matches `expr` expression if a `cond` expression matches.
+//! An `imply` expression (`cond -> expr`) is an expression that matches `expr` expression if a `cond` expression matches.
 //!
 //! it matches `expr` on the same input of `cond`, and matches nothing if `cond` fails.
 //!
-//! it has higher precedence than sequences and ands, but lower precedence than ors.
+//! it has higher precedence than `sequence`s and `and`s, but lower precedence than `or`s.
 //!
 //! ```
 //! assert!(matches!("abc123": str, alpha -> (alpha | dec)+));
@@ -233,7 +233,7 @@
 //! (allowed1 = 1) (allowed2 = 2) & (allowed3 = 3) | (allowed4 = 4) ((allowed5 = 5 (allowed6 = 6)))
 //! !(not_allowed1 = 1) (not_allowed2= 2))? list<(not_allowed3 = 3), ','>
 //! ```
-//! Captures can be repeated by suffixing their name with a repetition operator.
+//! Captures can be repeated by suffixing their name with a [repetition](#repetition) operator.
 //!
 //! `?` resolves to [`Option<T>`] and others resolve to [`Vec<T>`], where `T` is the type of the capture.
 //! ```rust
@@ -247,16 +247,16 @@
 //! #### Normal
 //! The matched expression does not contain any nested captures.
 //!
-//! These captures inherit the type of the matched section.
+//! These captures inherit the type of [`MatchAble::Slice`].
 //! ```rust
 //! # use crate::*;
 //! assert_eq!(try_match!("abcd": str, 'a' (bc = "bc") 'd').unwrap().bc, "bc");
 //! ```
 //!
 //! #### Term
-//! Matches a local unparameterized term and inherits the type of that term.      
+//! Matches a local unparameterized [term](crate::gramex!#term) and inherits the type of that term capture.      
 //!
-//! Their matched expression must be a lone, unmodified path atom referring to that term.
+//! Their matched expression must be a lone, unmodified [`path` atom](#path) referring to that term.
 //! ```rust
 //! # use crate::*;
 //! gramex! {
@@ -268,9 +268,9 @@
 //! ```
 //!
 //! #### Imply
-//! Matches an imply expression, resolve to `None` if `cond` fails and `Some(type)` if `expr` matches, where `type` is the type of `expr`.
+//! Matches an [`imply`](#imply) expression, resolve to `None` if `cond` fails and `Some(type)` if `expr` matches, where `type` is the capture type of `expr`.
 //!
-//! inherit the type of `expr` in type maps.
+//! inherit the `expr` own capture type in type maps.
 //!
 //! ```
 //! assert_eq(try_match("abc": str, 'a' (b = 'b' -> "bc")).unwrap().b, Some("bc"));
@@ -280,9 +280,9 @@
 //! #### Structured
 //! Captures that contain nested captures inside them.      
 //!
-//! These nested captures can occur in any allowed place except inside an OR expression.
+//! These nested captures can occur in any allowed place except inside an [`or`](#or) expression.
 //!
-//! Structured captures generate their own type, a struct containing their inner captures as fields, plus a `matched` field containing the raw matched slice.
+//! Structured captures generate their own type, a struct containing their inner captures as fields, plus a `matched` field containing the whole matched section.
 //! ```rust
 //! # use crate::*;
 //! let capture = try_match!("abcd": str, 'a' (bc = (b = 'b') (c = 'c')) 'd').unwrap().bc;
@@ -292,11 +292,11 @@
 //! ```
 //!
 //! #### Enumerated
-//!  The matched expression is an `or` expression containing nested captures.    
+//!  The matched expression is an [`or`](#or) expression containing nested captures.    
 //!
-//! The inner captures do not need to be the ORed expression directly; they can be nested deeper inside it. However, no two captures can exist in the exact same branch.     
+//! The inner captures do not need to be the `or` braches directly, they can be nested deeper inside it. However, no two captures can exist in the exact same branch.     
 //!
-//! Not all OR branches need to contain captures.    
+//! Not all branches need to contain captures.    
 //!
 //! Enumerated captures generate their own enum type, representing the inner captures as variants, plus a default `None` variant if not all branches have captures.
 //! ```rust
@@ -326,7 +326,7 @@
 //!
 //! Type specifiers and map blocks control the capture's base type before it is passed to a repetition container (like `Vec`), not the inverse.
 //!
-//! For more info about capture types, see the [`gramex`] macro documentation.
+//! For more info about capture types, see the [`gramex`](crate::gramex!#capture-types) macro documentation.
 
 use crate::*;
 use std::ops::RangeInclusive;
