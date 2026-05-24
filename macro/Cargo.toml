@@ -5,8 +5,8 @@ version = "0.1.0"
 edition = "2024"
 readme = "./readme.md"
 license = "MIT"
-repository = "https://github.com/aliibrahim123/structom"
-documentation = "https://docs.rs/structom/"
+repository = "https://github.com/aliibrahim123/gramex"
+documentation = "https://docs.rs/gramex/"
 
 [lib]
 proc-macro = true
