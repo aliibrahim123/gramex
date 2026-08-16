@@ -5,6 +5,8 @@ use std::{fmt::Display, str::FromStr};
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote_spanned};
 
+pub type Tokens = Vec<TokenTree>;
+
 /// reducing boilerplate of parsing [`TokenStream`].
 #[derive(Debug)]
 pub struct Cursor<'a> {
@@ -74,7 +76,7 @@ impl Cursor<'_> {
 		punct.as_char() == char
 	}
 	/// eat multiple [`Punct`]s of specific characters
-	pub fn multi_punct<const N: usize>(&mut self, chars: [char; N]) -> Option<Vec<TokenTree>> {
+	pub fn multi_punct<const N: usize>(&mut self, chars: [char; N]) -> Option<Tokens> {
 		if self.try_multi_punct(chars) {
 			Some(self.tokens[self.ind - N..self.ind].to_vec())
 		} else {
@@ -97,7 +99,7 @@ impl Cursor<'_> {
 			}
 		}
 		matches!(self.peek_next(N - 1), Some(TokenTree::Punct(punct))
-			if punct.as_char() == chars[N - 1] && punct.spacing() == Spacing::Alone
+			if punct.as_char() == chars[N - 1]
 		)
 	}
 	/// eat an [`Ident`]
@@ -133,6 +135,10 @@ impl Cursor<'_> {
 		}
 		self.skip();
 		true
+	}
+	pub fn test_kw(&self, kw: &str) -> bool {
+		let Some(TokenTree::Ident(ident)) = self.peek() else { return false };
+		ident.to_string() == kw
 	}
 	/// eat a [`Literal`]
 	pub fn literal(&mut self) -> Option<Literal> {
@@ -200,7 +206,17 @@ impl Cursor<'_> {
 		Some(Cursor::new(group.stream(), group.span_close(), self.errors))
 	}
 
-	pub fn eat_until(&mut self, pred: impl Fn(&mut Self) -> bool) -> Vec<TokenTree> {
+	pub fn eat_until(
+		&mut self, expected: impl Display, pred: impl Fn(&mut Self) -> bool,
+	) -> Option<Tokens> {
+		let tokens = self.try_eat_until(pred);
+		if tokens.is_empty() {
+			self.expected(expected);
+			return None;
+		}
+		Some(tokens)
+	}
+	pub fn try_eat_until(&mut self, pred: impl Fn(&mut Self) -> bool) -> Tokens {
 		let start = self.ind;
 		while !self.is_end() && !pred(self) {
 			self.skip();
