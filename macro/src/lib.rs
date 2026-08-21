@@ -7,6 +7,7 @@ use crate::{
 	parse::{parse_expr, parse_grammer_decl},
 };
 
+mod analyze;
 mod cursor;
 mod parse;
 

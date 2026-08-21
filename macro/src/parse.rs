@@ -1,27 +1,30 @@
+use chunked_quote::quote;
 use proc_macro2::{
 	Delimiter::{self, Brace, Bracket, Parenthesis},
 	Group, Ident, Literal, Spacing, Span, TokenStream, TokenTree,
 };
-use quote::{ToTokens, quote};
 
-use crate::cursor::{Cursor, Error, Tokens, err};
+use crate::{
+	analyze::CapInfo,
+	cursor::{Cursor, Error, err},
+};
 
 /// repetition specifiers
 ///
 /// **grammer**: `'?' | '*' | '+' | '[' exact:nb ']' | '[' min?:nb ".." max?:nb ']'`
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub struct Rep(pub u64, pub u64);
+pub struct Rep(pub u32, pub u32);
 impl Rep {
 	/// no repetition
 	pub const ONCE: Self = Self(1, 1);
 	/// optional: `?`
 	pub const OPTIONAL: Self = Self(0, 1);
 	/// more than 0: `*`
-	pub const MANY_OPT: Self = Self(0, u64::MAX);
+	pub const MANY_OPT: Self = Self(0, u32::MAX);
 	/// more than 1: `+`
-	pub const PLUS1: Self = Self(1, u64::MAX);
+	pub const PLUS1: Self = Self(1, u32::MAX);
 
-	fn exact(n: u64) -> Self {
+	fn exact(n: u32) -> Self {
 		Self(n, n)
 	}
 	fn is_exact(self) -> bool {
@@ -40,22 +43,48 @@ pub enum Atom {
 	Group(Box<Expr>),
 	/// call to compound matcher: `path '<' args:list<matcher, ','> '>'`
 	Call {
-		path: Tokens,
+		path: Box<[TokenTree]>,
 		args: Box<[Matcher]>,
 	},
 }
 
+/// capture type specifier
+#[derive(Debug, Clone)]
+pub enum CapType {
+	Inherited,
+	/// **grammer**: `':' type`
+	Explicit(TokenStream),
+	// **grammer**: `':' "struct" ident?`
+	Struct(Option<Ident>),
+	/// **grammer**: `':' "enum" ident?`
+	Enum(Option<Ident>),
+}
+
 /// capture of matched section
 ///
-/// **grammer**: `ident rep? ':' atom |  '(' ident rep? (":" -> ty) '=' expr ("=>" -> conv:block) ')'`
+/// **grammer**: `ident rep? ':' atom |  '(' ident rep? (":" -> cap_type) '=' expr ("=>" -> map:expr) ')'`
 #[derive(Debug, Clone)]
 pub struct Capture {
 	pub ident: Ident,
 	pub rep: Rep,
-	pub ty: Option<Tokens>,
+	pub ty: CapType,
 	// a block that transform the capture
-	pub conv: Option<Tokens>,
+	pub map: Option<TokenStream>,
 	pub expr: Expr,
+	pub info: Option<CapInfo>,
+}
+
+impl Default for Capture {
+	fn default() -> Self {
+		Self {
+			ident: Ident::new("default", Span::call_site()),
+			rep: Rep::ONCE,
+			ty: CapType::Inherited,
+			map: None,
+			expr: Expr::Error,
+			info: None,
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +120,7 @@ fn is_expr_end(cur: &Cursor) -> bool {
 	is_end || cur.test_punct('>') || cur.test_multi_punct(['=', '>']) | cur.test_kw("let")
 }
 
-fn try_parse_path(cur: &mut Cursor) -> Option<Tokens> {
+fn try_parse_path(cur: &mut Cursor) -> Option<Vec<TokenTree>> {
 	let start = cur.ind;
 	let mut segments = Vec::new();
 	if cur.try_multi_punct([':', ':']) {
@@ -120,7 +149,7 @@ fn parse_rep(cur: &mut Cursor) -> Rep {
 	} else if let Some(mut cur) = cur.try_enter_group(Bracket) {
 		let min = cur.try_nb();
 		let rep = if cur.try_multi_punct(['.', '.']) {
-			let max = cur.try_nb().unwrap_or(u64::MAX);
+			let max = cur.try_nb().unwrap_or(u32::MAX);
 			Rep(min.unwrap_or(0), max)
 		} else {
 			min.map(Rep::exact).unwrap_or_else(|| {
@@ -154,7 +183,7 @@ fn parse_atom(cur: &mut Cursor) -> Option<Atom> {
 				}
 			}
 			cur.punct('>')?;
-			Some(Atom::Call { path, args: args.into_boxed_slice() })
+			Some(Atom::Call { path: path.into_boxed_slice(), args: args.into_boxed_slice() })
 		} else {
 			Some(Atom::Matcher(TokenTree::Group(Group::new(
 				Delimiter::None,
@@ -167,6 +196,20 @@ fn parse_atom(cur: &mut Cursor) -> Option<Atom> {
 			cur.skip();
 		}
 		None
+	}
+}
+
+fn parse_capture_type(cur: &mut Cursor) -> CapType {
+	if !cur.try_punct(':') {
+		CapType::Inherited
+	} else if cur.try_kw("struct") {
+		CapType::Struct(cur.try_ident())
+	} else if cur.try_kw("enum") {
+		CapType::Enum(cur.try_ident())
+	} else {
+		cur.eat_until("a type", |cur| cur.test_punct('='))
+			.map(CapType::Explicit)
+			.unwrap_or(CapType::Inherited)
 	}
 }
 
@@ -183,7 +226,7 @@ fn try_inline_capture(cur: &mut Cursor) -> Option<Expr> {
 	} else {
 		Expr::Error
 	};
-	let cap = Capture { ident, rep, ty: None, conv: None, expr };
+	let cap = Capture { ident, rep, expr, ..Default::default() };
 	Some(Expr::Capture(Box::new(cap)))
 }
 fn try_parse_capture(cur: &mut Cursor) -> Option<Expr> {
@@ -196,14 +239,11 @@ fn try_parse_capture(cur: &mut Cursor) -> Option<Expr> {
 		return None;
 	}
 
-	let ty = match cur.try_punct(':') {
-		true => cur.eat_until("a type", |cur| cur.test_punct('=')),
-		false => None,
-	};
+	let ty = parse_capture_type(cur);
 	cur.punct('=');
 
 	let expr = parse_expr(cur);
-	let conv = match cur.try_multi_punct(['=', '>']) {
+	let map = match cur.try_multi_punct(['=', '>']) {
 		true => cur.eat_until("an expression", |cur| cur.is_end()),
 		false if !cur.is_end() => {
 			cur.expected("`)`");
@@ -212,7 +252,7 @@ fn try_parse_capture(cur: &mut Cursor) -> Option<Expr> {
 		false => None,
 	};
 
-	let cap = Capture { ident, rep, ty, conv, expr };
+	let cap = Capture { ident, rep, ty, map, expr, info: None };
 	Some(Expr::Capture(Box::new(cap)))
 }
 
@@ -251,9 +291,12 @@ fn parse_expr_primary(cur: &mut Cursor) -> Expr {
 		let right_span = cur.cur_span();
 		let right = match parse_atom(cur) {
 			Some(Atom::Matcher(right)) => right,
-			Some(_) => {
+			Some(atom) => {
 				err!(cur, "expected a value atom", right_span);
-				return Expr::Unit { not, near, rep: Rep::ONCE, atom: Atom::Matcher(left) };
+				return Expr::Seq(vec![
+					Expr::Unit { not, near, rep: Rep::ONCE, atom: Atom::Matcher(left) },
+					Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom },
+				]);
 			}
 			None => return Expr::Unit { not, near, rep: Rep::ONCE, atom: Atom::Matcher(left) },
 		};
@@ -304,12 +347,11 @@ pub fn parse_expr(cur: &mut Cursor) -> Expr {
 
 /// matcher definition
 ///
-/// **grammer**: ("for" -> matched_type:ty ':') expr ("=>" -> conv:expr))
+/// **grammer**: ("for" -> matched_type:type ':') expr ("=>" -> map:expr))
 #[derive(Debug, Clone)]
 pub struct Matcher {
-	pub matched_type: Option<Tokens>,
+	pub matched_type: Option<TokenStream>,
 	pub expr: Expr,
-	pub conv: Option<Tokens>,
 }
 pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 	let matched_type = match cur.try_kw("for") {
@@ -323,78 +365,127 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 		}
 		false => None,
 	};
-	let expr = parse_expr(cur);
-	let conv = match cur.try_multi_punct(['=', '>']) {
+	let mut expr = parse_expr(cur);
+	let map = match cur.try_multi_punct(['=', '>']) {
 		true => cur.eat_until("a expr", |cur| {
 			if inside_call { cur.test_punct(',') || cur.test_punct('>') } else { cur.is_end() }
 		}),
 		false => None,
 	};
-	Matcher { matched_type, expr, conv }
+	let ident = Ident::new("root", Span::call_site());
+	let cap = Capture { ident, map, expr, ..Default::default() };
+	expr = Expr::Capture(Box::new(cap));
+	Matcher { matched_type, expr }
+}
+
+/// term optmize attribute
+///
+/// **grammer**: ('#' -> '[' "optimize" '(' list<"check" | "test" | "inline", ','> ')' ']')
+#[derive(Debug, Clone, Default)]
+struct TermOptimize {
+	pub check: bool,
+	pub test: bool,
+	pub inline: bool,
 }
 
 /// a term in gramex macro
 ///
-/// **grammer**: `"let" ident ('<' -> args:list<ident, ','> '>') (':' -> ty) = expr ("=>" -> conv:expr)`
+/// **grammer**: `
+/// 	optimize:term_optimize "let" ident ('<' -> args:list<ident, ','> '>') (':' -> type)
+/// 	'=' expr ("=>" -> map:expr)
+/// `
 #[derive(Debug, Clone)]
 pub struct Term {
 	pub name: Ident,
 	pub args: Vec<Ident>,
-	pub capture_type: Option<Tokens>,
+	pub optimize: TermOptimize,
 	pub expr: Expr,
 }
 
 /// a grammer declaration
 ///
 /// **grammer**: `
-///   'for' matched_type:ty ';' terms*:term
+///   'for' matched_type:type ';' terms*:term
 /// `
 #[derive(Debug, Clone)]
 pub struct GrammarDecl {
-	pub matched_type: Tokens,
+	pub matched_type: TokenStream,
 	pub terms: Vec<Term>,
+}
+
+fn parse_term_optimize(cur: &mut Cursor) -> TermOptimize {
+	let mut optmize = TermOptimize::default();
+	if !cur.try_punct('#') {
+		return optmize;
+	};
+	let Some(mut cur) = cur.enter_group(Bracket) else { return optmize };
+	if cur.kw("optimize").is_some() {
+		let Some(mut cur) = cur.enter_group(Parenthesis) else { return optmize };
+		loop {
+			if cur.try_kw("check") {
+				optmize.check = true;
+			} else if cur.try_kw("test") {
+				optmize.test = true;
+			} else if cur.try_kw("inline") {
+				optmize.inline = true;
+			} else {
+				cur.expected("one of `check`, `test`, `inline`");
+			}
+			cur.try_eat_until(|cur| cur.try_punct(','));
+			if cur.is_end() {
+				break;
+			}
+		}
+	}
+	if cur.tokens.len() > 2 {
+		cur.expected("`]`");
+	}
+	optmize
+}
+fn try_parse_term(cur: &mut Cursor) -> Option<Term> {
+	let optimize = parse_term_optimize(cur);
+	if cur.kw("let").is_none() {
+		cur.skip();
+		return None;
+	}
+	let name = cur.ident().unwrap_or_else(|| Ident::new("_", Span::call_site()));
+	let mut args = Vec::new();
+	if cur.try_punct('<') {
+		loop {
+			cur.ident().map(|arg| args.push(arg));
+			cur.try_eat_until(|cur| cur.try_punct(',') || cur.test_punct('>'));
+			if cur.is_end() {
+				cur.expected("`>`");
+				break;
+			}
+			if cur.try_punct('>') {
+				break;
+			}
+		}
+	}
+	let ty = parse_capture_type(cur);
+	cur.punct('=')?;
+	let mut expr = parse_expr(cur);
+	let map = match cur.try_multi_punct(['=', '>']) {
+		true => cur.eat_until("an expression", |cur| cur.test_punct(';')),
+		false => None,
+	};
+
+	let cap = Capture { ident: name.clone(), ty, map, expr, ..Default::default() };
+	expr = Expr::Capture(Box::new(cap));
+	cur.punct(';');
+
+	Some(Term { name, args, optimize, expr })
 }
 
 pub fn parse_grammer_decl(cur: &mut Cursor) -> GrammarDecl {
 	cur.kw("for");
-	let unit_type = || vec![Group::new(Delimiter::Parenthesis, TokenStream::new()).into()];
+	let unit_type = || quote!(());
 	let matched_type = cur.eat_until("a type", |cur| cur.test_punct(';')).unwrap_or_else(unit_type);
 	cur.punct(';');
 	let mut terms = Vec::new();
 	while !cur.is_end() {
-		if cur.kw("let").is_none() {
-			cur.skip();
-			continue;
-		}
-		let name = cur.ident().unwrap_or_else(|| Ident::new("_", Span::call_site()));
-		let mut args = Vec::new();
-		if cur.try_punct('<') {
-			loop {
-				cur.ident().map(|arg| args.push(arg));
-				cur.try_eat_until(|cur| cur.try_punct(',') || cur.test_punct('>'));
-				if cur.is_end() {
-					cur.expected("`>`");
-					break;
-				}
-				if cur.try_punct('>') {
-					break;
-				}
-			}
-		}
-		let capture_type = match cur.try_punct(':') {
-			true => cur.eat_until("a type", |cur| cur.test_punct('=')),
-			false => None,
-		};
-		if cur.punct('=').is_none() {
-			continue;
-		};
-		let expr = parse_expr(cur);
-		let conv = match cur.try_multi_punct(['=', '>']) {
-			true => cur.eat_until("an expression", |cur| cur.test_punct(';')),
-			false => None,
-		};
-		cur.punct(';');
-		terms.push(Term { name, args, capture_type, expr });
+		try_parse_term(cur).map(|t| terms.push(t));
 	}
 	GrammarDecl { matched_type, terms }
 }

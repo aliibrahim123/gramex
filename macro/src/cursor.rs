@@ -2,10 +2,9 @@
 
 use std::{fmt::Display, str::FromStr};
 
-use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
-use quote::{ToTokens, quote_spanned};
-
-pub type Tokens = Vec<TokenTree>;
+use chunked_quote::chunk_spanned;
+use proc_macro2::{Delimiter, Group, Ident, Literal, Spacing, Span, TokenStream, TokenTree};
+use quote::ToTokens;
 
 /// reducing boilerplate of parsing [`TokenStream`].
 #[derive(Debug)]
@@ -76,9 +75,9 @@ impl Cursor<'_> {
 		punct.as_char() == char
 	}
 	/// eat multiple [`Punct`]s of specific characters
-	pub fn multi_punct<const N: usize>(&mut self, chars: [char; N]) -> Option<Tokens> {
+	pub fn multi_punct<const N: usize>(&mut self, chars: [char; N]) -> Option<TokenStream> {
 		if self.try_multi_punct(chars) {
-			Some(self.tokens[self.ind - N..self.ind].to_vec())
+			Some(TokenStream::from_iter(self.tokens[self.ind - N..self.ind].iter().cloned()))
 		} else {
 			let chars = chars.iter().collect::<String>();
 			err!(self, "expected `{chars}");
@@ -119,9 +118,10 @@ impl Cursor<'_> {
 		Some(ident)
 	}
 	/// eat a specific [`Ident`]
-	pub fn kw(&mut self, kw: &str) -> Option<Span> {
+	pub fn kw(&mut self, kw: &str) -> Option<Ident> {
 		if self.try_kw(kw) {
-			Some(self.prev().span())
+			let TokenTree::Ident(ident) = self.prev() else { unreachable!() };
+			Some(ident.clone())
 		} else {
 			err!(self, "expected `{kw}`");
 			None
@@ -208,7 +208,7 @@ impl Cursor<'_> {
 
 	pub fn eat_until(
 		&mut self, expected: impl Display, pred: impl Fn(&mut Self) -> bool,
-	) -> Option<Tokens> {
+	) -> Option<TokenStream> {
 		let tokens = self.try_eat_until(pred);
 		if tokens.is_empty() {
 			self.expected(expected);
@@ -216,12 +216,12 @@ impl Cursor<'_> {
 		}
 		Some(tokens)
 	}
-	pub fn try_eat_until(&mut self, pred: impl Fn(&mut Self) -> bool) -> Tokens {
+	pub fn try_eat_until(&mut self, pred: impl Fn(&mut Self) -> bool) -> TokenStream {
 		let start = self.ind;
 		while !self.is_end() && !pred(self) {
 			self.skip();
 		}
-		self.tokens[start..self.ind].to_vec()
+		TokenStream::from_iter(self.tokens[start..self.ind].iter().cloned())
 	}
 }
 
@@ -240,7 +240,7 @@ impl Error {
 impl ToTokens for Error {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let Self { msg, span } = self;
-		tokens.extend(quote_spanned! { *span => ::core::compile_error!(#msg); });
+		chunk_spanned!(tokens, *span, ::core::compile_error!(#msg););
 	}
 }
 
@@ -251,6 +251,9 @@ macro_rules! err {
 	}};
 	($cur:ident, $msg:literal, $span:expr) => {{
 		$cur.errors.push(Error::new(format!($msg), $span));
+	}};
+	($cur:ident, $msg:expr, $span:expr) => {{
+		$cur.errors.push(Error::new($msg.to_string(), $span));
 	}};
 }
 pub(crate) use err;
