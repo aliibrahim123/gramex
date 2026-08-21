@@ -130,7 +130,7 @@ impl Cursor<'_> {
 	/// try eat a specific [`Ident`]
 	pub fn try_kw(&mut self, kw: &str) -> bool {
 		let Some(TokenTree::Ident(ident)) = self.peek() else { return false };
-		if ident.to_string() != kw {
+		if ident != kw {
 			return false;
 		}
 		self.skip();
@@ -138,7 +138,7 @@ impl Cursor<'_> {
 	}
 	pub fn test_kw(&self, kw: &str) -> bool {
 		let Some(TokenTree::Ident(ident)) = self.peek() else { return false };
-		ident.to_string() == kw
+		ident == kw
 	}
 	/// eat a [`Literal`]
 	pub fn literal(&mut self) -> Option<Literal> {
