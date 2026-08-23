@@ -287,7 +287,7 @@ fn is_atomic_unit(expr: &Expr) -> bool {
 	matches!(expr,
 		Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom }
 		if matches!(atom, Atom::Matcher(_) | Atom::Call { .. })
-	)
+	) || matches!(expr, Expr::Range(_, _))
 }
 
 fn resolve_leaf_capture(

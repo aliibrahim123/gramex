@@ -24,13 +24,13 @@ pub trait MatchAble {
 }
 
 pub trait Matcher<M: MatchAble + ?Sized> {
-	fn test(&self, matched: &M, ind: &mut M::Offset) -> bool;
-	fn check(&self, matched: &M, ind: &mut M::Offset) -> MatchResult<(), M>;
+	fn test(&self, matched: &M, off: &mut M::Offset) -> bool;
+	fn check(&self, matched: &M, off: &mut M::Offset) -> MatchResult<(), M>;
 }
 pub trait Capturer<M: MatchAble + ?Sized>: Matcher<M> {
 	type Capture<'a>
 	where
 		M: 'a;
-	fn capture<'a>(&self, matched: &'a M, ind: &mut M::Offset)
+	fn capture<'a>(&self, matched: &'a M, off: &mut M::Offset)
 	-> MatchResult<Self::Capture<'a>, M>;
 }

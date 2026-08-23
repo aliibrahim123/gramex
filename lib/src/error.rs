@@ -11,6 +11,7 @@ pub enum Expected {
 	None,
 	A(Cow<'static, str>),
 	OneOf(Vec<Cow<'static, str>>),
+	Between(Cow<'static, str>, Cow<'static, str>),
 }
 impl Display for Expected {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -24,6 +25,7 @@ impl Display for Expected {
 				}
 				Ok(())
 			}
+			Self::Between(a, b) => write!(f, "expected between {a} and {b}"),
 		}
 	}
 }
