@@ -231,7 +231,7 @@ fn try_inline_capture(cur: &mut Cursor) -> Option<Expr> {
 	}
 
 	let expr = if let Some(atom) = parse_atom(cur) {
-		Expr::Unit { not: false, near: false, atom, rep }
+		Expr::Unit { not: false, near: false, atom, rep: Rep::ONCE }
 	} else {
 		Expr::Error
 	};

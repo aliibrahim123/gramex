@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 
 use crate::{
 	cursor::{Error, err},
-	parse::{Atom, CapType, Capture, Expr, Matcher, Rep, Term},
+	parse::{Atom, CapType, Capture, Expr, GrammarDecl, Matcher, Rep, Term},
 };
 
 #[derive(Debug, Clone)]
@@ -37,7 +37,7 @@ impl CapContainer {
 }
 #[derive(Debug, Clone)]
 pub struct CapInfo {
-	pub resolved_type: Option<TokenStream>,
+	pub resolved_type: TokenStream,
 	pub kind: CapKind,
 	pub container: CapContainer,
 }
@@ -49,27 +49,33 @@ struct CapChild {
 	container: CapContainer,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct CapParent {
+	is_generated: bool,
 	children: Vec<CapChild>,
 	child_names: FxHashSet<String>,
 }
+impl CapParent {
+	fn new(is_generated: bool) -> Self {
+		Self { is_generated, children: Vec::new(), child_names: FxHashSet::default() }
+	}
+}
 
-#[derive(Debug)]
-struct CapMod {
-	stream: TokenStream,
+#[derive(Debug, Default)]
+pub struct CapMod {
+	pub stream: TokenStream,
 	items: FxHashSet<String>,
 }
 
 #[derive(Debug)]
-struct Context<'a> {
-	capture_mod: &'a mut Option<CapMod>,
-	matched_type: &'a mut Option<TokenStream>,
-	errors: &'a mut Vec<Error>,
+pub struct Context<'a> {
+	pub capture_mod: Option<&'a mut CapMod>,
+	pub matched_type: Option<&'a TokenStream>,
+	pub errors: &'a mut Vec<Error>,
 }
 
 fn resolve_captures(
-	expr: &mut Expr, is_optional: bool, parent: &mut Option<CapParent>, ctx: &mut Context<'_>,
+	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context<'_>,
 ) {
 	match expr {
 		Expr::And(exprs) | Expr::Seq(exprs) => {
@@ -114,7 +120,9 @@ fn forbid_captures(expr: &Expr, errors: &mut Vec<Error>) {
 		Expr::Unit { atom: Atom::Group(expr), .. } => forbid_captures(expr, errors),
 		Expr::Unit { atom: Atom::Call { args, .. }, .. } => {
 			for arg in args {
-				forbid_captures(&arg.expr, errors);
+				let root_expr =
+					if let Expr::Capture(cap) = &arg.expr { &cap.expr } else { &arg.expr };
+				forbid_captures(root_expr, errors);
 			}
 		}
 		Expr::Capture(cap) => {
@@ -137,10 +145,12 @@ fn has_capture(expr: &Expr) -> bool {
 	}
 }
 
-fn default_cap(matched_type: &Option<TokenStream>) -> Option<TokenStream> {
-	matched_type.as_ref().map(|m| {
+fn default_cap(matched_type: Option<&TokenStream>) -> TokenStream {
+	if let Some(m) = matched_type {
 		quote! { <#m as ::gramex::MatchAble>::Slice<'a> }
-	})
+	} else {
+		TokenStream::new()
+	}
 }
 
 #[derive(Debug)]
@@ -150,13 +160,11 @@ enum Create {
 	Enum(Ident),
 }
 
-fn resolve_capture_type(
-	cap: &mut Capture, ctx: &mut Context,
-) -> Result<(Option<TokenStream>, Create), ()> {
-	let mut resolve_gen_item = |item_ident: Option<_>, create: fn(_) -> _| -> Result<_, ()> {
-		let item_ident = item_ident.unwrap_or_else(|| pascal_case(&cap.ident));
+fn resolve_capture_type(cap: &mut Capture, ctx: &mut Context) -> Result<(TokenStream, Create), ()> {
+	let mut resolve_gen_item = |item_ident: &mut Option<_>, create: fn(_) -> _| -> Result<_, ()> {
+		let item_ident = item_ident.take().unwrap_or_else(|| pascal_case(&cap.ident));
 
-		let Some(cap_mod) = ctx.capture_mod else {
+		let Some(cap_mod) = ctx.capture_mod.as_deref_mut() else {
 			let msg = "can not use generated capture type outside grammar declerations";
 			err!(ctx, msg, cap.ident.span());
 			return Err(());
@@ -166,13 +174,12 @@ fn resolve_capture_type(
 			return Err(());
 		}
 
-		Ok((Some(quote! { captures::#item_ident }), create(item_ident)))
+		Ok((quote! { captures::#item_ident<'a> }, create(item_ident)))
 	};
 
-	let ty = mem::replace(&mut cap.ty, CapType::Inherited);
-	match ty {
+	match &mut cap.ty {
 		CapType::Inherited => Ok((default_cap(ctx.matched_type), Create::None)),
-		CapType::Explicit(ty) => Ok((Some(ty), Create::None)),
+		CapType::Explicit(ty) => Ok((ty.clone(), Create::None)),
 		CapType::Struct(item_ident) => resolve_gen_item(item_ident, Create::Struct),
 		CapType::Enum(item_ident) => resolve_gen_item(item_ident, Create::Enum),
 	}
@@ -183,35 +190,47 @@ fn life_marker(stream: &mut TokenStream) {
 }
 
 fn resolve_struct_capture(
-	cap: &mut Capture, resolved_type: &Option<TokenStream>, create: Create, ctx: &mut Context,
+	cap: &mut Capture, resolved_type: &mut TokenStream, create: Create, parent: &CapParent,
+	ctx: &mut Context,
 ) -> Result<CapKind, ()> {
-	let mut parent = Some(CapParent::default());
-	resolve_captures(&mut cap.expr, false, &mut parent, ctx);
-	let parent = parent.unwrap();
+	let mut _self = CapParent::new(matches!(create, Create::Struct(_)));
+	resolve_captures(&mut cap.expr, false, &mut _self, ctx);
 
 	if let Create::Struct(item) = create {
 		let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
-		chunk!(stream, # #[derive(Debug)] pub struct #item<'a> {
-			#for CapChild { name, resolved_type, container } in &parent.children #{
-				pub #name: #do {container.wrap_type(stream, resolved_type)},
-			}
-			# #[doc(hidden)] pub __life_marker: #do {life_marker(stream)},
+		chunk!(stream,
+			# #[derive(Debug)]
+			pub struct #item<'a> {
+				#for CapChild { name, resolved_type, container } in &_self.children #{
+					pub #name: #do {container.wrap_type(stream, resolved_type)},
+				}
+				# #[doc(hidden)] pub __life_marker: #do {life_marker(stream)
+			},
 		})
 	} else if let Create::Enum(_) = create {
 		err!(ctx, "expected root or expression for generated enum", cap.ident.span());
 		return Err(());
 	}
 
-	let fields = parent.children.into_iter().map(|cap| cap.name).collect();
-	if resolved_type.is_some() { Ok(CapKind::Struct(fields)) } else { Ok(CapKind::Tuple(fields)) }
+	let fields = |_self: CapParent| _self.children.into_iter().map(|cap| cap.name).collect();
+	if matches!(cap.ty, CapType::Inherited) {
+		if parent.is_generated {
+			*resolved_type = quote! { ( #for child in &_self.children #{
+				#do {child.container.wrap_type(__stream, &child.resolved_type)},
+			})}
+		}
+		Ok(CapKind::Tuple(fields(_self)))
+	} else {
+		Ok(CapKind::Struct(fields(_self)))
+	}
 }
 
 fn resolve_enum_variant(
-	expr: &mut Expr, variants_def: &mut Option<TokenStream>, ctx: &mut Context,
+	expr: &mut Expr, variant_names: &mut FxHashSet<String>, variants_def: &mut Option<TokenStream>,
+	ctx: &mut Context,
 ) -> Option<Ident> {
-	let mut parent = Some(CapParent::default());
+	let mut parent = CapParent::new(true);
 	resolve_captures(expr, false, &mut parent, ctx);
-	let mut parent = parent.unwrap();
 
 	if parent.children.len() > 1 {
 		let msg = "an or branch in a capture enum must have at most one capture";
@@ -221,6 +240,11 @@ fn resolve_enum_variant(
 	let child = parent.children.drain(..).next();
 
 	if let Some(CapChild { name, resolved_type, container }) = &child {
+		if !variant_names.insert(name.to_string()) {
+			err!(ctx, "a variant exist with the same name", name.span());
+			return None;
+		}
+
 		if let Some(mut def) = variants_def.as_mut() {
 			chunk!(def, #{pascal_case(name)}(#do {container.wrap_type(def, resolved_type)}),)
 		}
@@ -232,20 +256,24 @@ fn resolve_enum_capture(
 	exprs: &mut [Expr], ident: &Ident, create: Create, ctx: &mut Context,
 ) -> Result<CapKind, ()> {
 	let mut variants = Vec::new();
+	let mut variant_names = FxHashSet::default();
 	let mut variants_def = matches!(create, Create::Enum(_)).then(TokenStream::new);
 	let mut has_none = false;
 	for expr in exprs {
-		let var = resolve_enum_variant(expr, &mut variants_def, ctx);
+		let var = resolve_enum_variant(expr, &mut variant_names, &mut variants_def, ctx);
 		has_none |= var.is_none();
 		variants.push(var);
 	}
 
 	if let Create::Enum(item) = create {
 		let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
-		chunk!(stream, # #[derive(Debug)] pub enum #item<'a> {
-			#if has_none #{ None, }
-			#do {stream.extend(variants_def.unwrap())}
-			# #[doc(hidden)] __LifeMarker #do {life_marker(stream)},
+		chunk!(stream,
+			# #[derive(Debug)]
+			pub enum #item<'a> {
+				#if has_none #{ None, }
+				#do {stream.extend(variants_def.unwrap())}
+				# #[doc(hidden)] __LifeMarker #do {life_marker(stream)
+			},
 		})
 	} else if let Create::Struct(_) = create {
 		err!(ctx, "expected root non or expression for generated struct", ident.span());
@@ -258,17 +286,21 @@ fn resolve_enum_capture(
 fn is_atomic_unit(expr: &Expr) -> bool {
 	matches!(expr,
 		Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom }
-		if matches!(atom, Atom::Group(_) | Atom::Call { .. })
+		if matches!(atom, Atom::Matcher(_) | Atom::Call { .. })
 	)
 }
 
 fn resolve_leaf_capture(
-	cap: &mut Capture, create: Create, need_from: bool, ctx: &mut Context,
+	cap: &mut Capture, create: Create, ctx: &mut Context,
 ) -> Result<CapKind, ()> {
+	let need_from = matches!(cap.ty, CapType::Inherited);
 	Ok(match create {
 		Create::Struct(item) => {
 			let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
-			chunk!(stream, pub struct #item (#{default_cap(ctx.matched_type)}););
+			chunk!(stream,
+				# #[derive(Debug)]
+				pub struct #item<'a> (#{default_cap(ctx.matched_type)});
+			);
 			CapKind::Struct(Vec::new())
 		}
 		Create::Enum(ident) => {
@@ -288,36 +320,33 @@ fn resolve_leaf_capture(
 }
 
 fn add_capture_child(
-	cap: &Capture, resolved_type: &Option<TokenStream>, container: CapContainer,
-	parent: &mut Option<CapParent>, ctx: &mut Context,
+	cap: &Capture, resolved_type: &TokenStream, container: CapContainer, parent: &mut CapParent,
+	ctx: &mut Context,
 ) -> Result<(), ()> {
-	if let Some(parent) = parent {
-		if !parent.child_names.insert(cap.ident.to_string()) {
-			err!(ctx, "a sibling capture exist with the same name", cap.ident.span());
-			return Err(());
-		}
-		parent.children.push(CapChild {
-			name: cap.ident.clone(),
-			resolved_type: resolved_type.clone().unwrap(),
-			container,
-		})
+	if !parent.child_names.insert(cap.ident.to_string()) {
+		err!(ctx, "a sibling capture exist with the same name", cap.ident.span());
+		return Err(());
 	}
+	parent.children.push(CapChild {
+		name: cap.ident.clone(),
+		resolved_type: resolved_type.clone(),
+		container,
+	});
 	Ok(())
 }
 
 fn resolve_capture(
-	cap: &mut Capture, is_optional: bool, parent: &mut Option<CapParent>, ctx: &mut Context,
+	cap: &mut Capture, is_optional: bool, parent: &mut CapParent, ctx: &mut Context,
 ) -> Result<(), ()> {
-	let need_from = matches!(&cap.ty, CapType::Explicit(_));
-	let (resolved_type, create) = resolve_capture_type(cap, ctx)?;
+	let (mut resolved_type, create) = resolve_capture_type(cap, ctx)?;
 
-	let kind = if has_capture(&cap.expr) {
+	let kind = if has_capture(&cap.expr) && !is_atomic_unit(&cap.expr) {
 		match &mut cap.expr {
 			Expr::Or(exprs) => resolve_enum_capture(exprs, &cap.ident, create, ctx)?,
-			_ => resolve_struct_capture(cap, &resolved_type, create, ctx)?,
+			_ => resolve_struct_capture(cap, &mut resolved_type, create, parent, ctx)?,
 		}
 	} else {
-		resolve_leaf_capture(cap, create, need_from, ctx)?
+		resolve_leaf_capture(cap, create, ctx)?
 	};
 
 	let container = match (is_optional, cap.rep) {
@@ -342,7 +371,7 @@ fn pascal_case(ident: &Ident) -> Ident {
 		if let Some(char) = section.chars().next() {
 			res.push(char.to_ascii_uppercase());
 		}
-		res.push_str(&section[1..]);
+		section.get(1..).map(|s| res.push_str(s));
 	}
 	Ident::new(&res, ident.span())
 }
@@ -352,24 +381,24 @@ pub struct AnalyzeResult {
 	pub has_captures: bool,
 }
 
-fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) -> AnalyzeResult {
+pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) -> AnalyzeResult {
 	let mut ctx = Context {
-		capture_mod: ctx.capture_mod,
-		matched_type: &mut matcher.matched_type,
+		matched_type: matcher.matched_type.as_ref().or(ctx.matched_type),
+		capture_mod: ctx.capture_mod.as_deref_mut(),
 		errors: ctx.errors,
 	};
 
 	let root_expr = if let Expr::Capture(cap) = &matcher.expr { &cap.expr } else { &matcher.expr };
 	if has_capture(root_expr) {
-		resolve_captures(&mut matcher.expr, false, &mut None, &mut ctx);
+		resolve_captures(&mut matcher.expr, false, &mut CapParent::new(false), &mut ctx);
 		AnalyzeResult { has_captures: true }
 	} else {
 		AnalyzeResult { has_captures: false }
 	}
 }
 
-fn analyze_term(term: &mut Term, ctx: &mut Context) -> AnalyzeResult {
-	let Term { name, args, optimize, expr } = term;
+pub fn analyze_term(term: &mut Term, ctx: &mut Context) -> AnalyzeResult {
+	let Term { args, expr, .. } = term;
 	let mut arg_names = FxHashSet::default();
 	for i in 0..args.len() {
 		if !arg_names.insert(args[i].to_string()) {
@@ -378,9 +407,12 @@ fn analyze_term(term: &mut Term, ctx: &mut Context) -> AnalyzeResult {
 		}
 	}
 
-	let root_expr = if let Expr::Capture(cap) = &expr { &cap.expr } else { &expr };
-	if has_capture(root_expr) {
-		resolve_captures(expr, false, &mut None, ctx);
+	let Expr::Capture(root_cap) = &expr else { unreachable!() };
+	if !matches!(root_cap.ty, CapType::Inherited)
+		|| root_cap.map.is_some()
+		|| has_capture(&root_cap.expr)
+	{
+		resolve_captures(expr, false, &mut CapParent::new(true), ctx);
 		AnalyzeResult { has_captures: true }
 	} else {
 		AnalyzeResult { has_captures: false }
