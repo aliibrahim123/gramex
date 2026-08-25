@@ -3,13 +3,14 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 
 use crate::{
-	analyze::{CapMod, analyze_term},
+	capture::{CapMod, analyze_term},
 	cursor::Cursor,
 	parse::{parse_expr, parse_grammer_decl},
 };
 
-mod analyze;
+mod capture;
 mod cursor;
+mod generate;
 mod parse;
 
 #[proc_macro]
@@ -27,7 +28,7 @@ pub fn gramex(input: TokenStream) -> TokenStream {
 	let mut decl = parse_grammer_decl(&mut cur);
 
 	let mut cap_mod = CapMod::default();
-	let mut ctx = analyze::Context {
+	let mut ctx = capture::Context {
 		capture_mod: Some(&mut cap_mod),
 		errors: &mut errors,
 		matched_type: Some(&decl.matched_type),

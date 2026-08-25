@@ -5,7 +5,7 @@ use proc_macro2::{
 };
 
 use crate::{
-	analyze::CapInfo,
+	capture::CapInfo,
 	cursor::{Cursor, Error, err},
 };
 

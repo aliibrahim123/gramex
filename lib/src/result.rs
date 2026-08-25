@@ -3,7 +3,7 @@ use std::{
 	fmt::{Debug, Display},
 };
 
-use crate::MatchAble;
+use crate::{MatchAble, Mode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Expected {
@@ -54,55 +54,67 @@ impl Display for MatchErrorKind {
 	}
 }
 
-pub struct MatchError<M: MatchAble + ?Sized> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MatchError {
 	pub kind: MatchErrorKind,
-	pub off: M::Offset,
+	pub off: usize,
 }
-impl<M: MatchAble + ?Sized> MatchError<M> {
-	pub fn mismatch(expected: Expected, off: M::Offset) -> Self {
+impl MatchError {
+	pub fn mismatch(expected: Expected, off: usize) -> Self {
 		Self { kind: MatchErrorKind::MisMatch(expected), off }
 	}
-	pub fn incomplete(expected: Expected, off: M::Offset) -> Self {
+	pub fn incomplete(expected: Expected, off: usize) -> Self {
 		Self { kind: MatchErrorKind::InComplete(expected), off }
 	}
-	pub fn excess(off: M::Offset) -> Self {
+	pub fn excess(off: usize) -> Self {
 		Self { kind: MatchErrorKind::Excess, off }
 	}
-	pub fn other(msg: impl Into<Cow<'static, str>>, off: M::Offset) -> Self {
+	pub fn other(msg: impl Into<Cow<'static, str>>, off: usize) -> Self {
 		Self { kind: MatchErrorKind::Other(msg.into()), off }
 	}
 }
 
-impl<M: MatchAble + ?Sized> Debug for MatchError<M>
+impl Display for MatchError
 where
-	M::Offset: Debug,
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("MatchError")
-			.field("kind", &self.kind)
-			.field("off", &self.off)
-			.finish()
-	}
-}
-impl<M: MatchAble + ?Sized> Clone for MatchError<M> {
-	fn clone(&self) -> Self {
-		Self { kind: self.kind.clone(), off: self.off }
-	}
-}
-impl<M: MatchAble + ?Sized> PartialEq for MatchError<M> {
-	fn eq(&self, other: &Self) -> bool {
-		self.kind == other.kind && self.off == other.off
-	}
-}
-impl<M: MatchAble + ?Sized> Display for MatchError<M>
-where
-	M::Offset: Display,
+	usize: Display,
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{} at {}", self.kind, self.off)
 	}
 }
-impl<M: MatchAble + ?Sized> std::error::Error for MatchError<M> where M::Offset: Display + Debug {}
+impl std::error::Error for MatchError where usize: Display + Debug {}
 
 #[allow(type_alias_bounds)]
-pub type MatchResult<T, M: MatchAble> = Result<T, MatchError<M>>;
+pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;
+
+pub trait IntoResult: Sized {
+	type Output;
+	fn into_result<M: Mode>(self, off: usize) -> MatchResult<Self::Output, M>;
+}
+impl IntoResult for bool {
+	type Output = ();
+	fn into_result<M: Mode>(self, off: usize) -> MatchResult<(), M> {
+		match self {
+			true => M::ok(|| ()),
+			false => M::err(|| MatchError::mismatch(Expected::None, off)),
+		}
+	}
+}
+impl<T> IntoResult for Option<T> {
+	type Output = T;
+	fn into_result<M: Mode>(self, off: usize) -> MatchResult<T, M> {
+		match self {
+			Some(v) => M::ok(|| v),
+			None => M::err(|| MatchError::mismatch(Expected::None, off)),
+		}
+	}
+}
+impl<T> IntoResult for Result<T, MatchError> {
+	type Output = T;
+	fn into_result<M: Mode>(self, _off: usize) -> MatchResult<T, M> {
+		match self {
+			Ok(v) => M::ok(|| v),
+			Err(e) => M::err(|| e),
+		}
+	}
+}
