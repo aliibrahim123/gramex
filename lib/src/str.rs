@@ -1,4 +1,5 @@
-use std::{borrow::Cow, ops::RangeInclusive, rc::Rc, sync::Arc};
+use alloc_crate::{borrow::Cow, boxed::Box, format, rc::Rc, string::String, sync::Arc};
+use core::ops::{Range, RangeInclusive};
 
 use crate::{
 	MatchAble, MatchResult, Matcher, Mode,
@@ -11,10 +12,13 @@ impl MatchAble for str {
 	fn len(&self) -> usize {
 		self.len()
 	}
-	fn slice<'a>(&'a self, range: std::ops::Range<usize>) -> Option<Self::Slice<'a>> {
+	fn slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>> {
 		self.get(range)
 	}
 	fn skip_n(&self, off: &mut usize, n: usize) -> bool {
+		if n == 0 {
+			return true;
+		}
 		let mut chars = self[*off..].chars();
 		if chars.nth(n - 1).is_none() {
 			*off = self.len();
@@ -41,10 +45,14 @@ macro_rules! define_matcher {
 					M::ok(|| &$rem[..len])
 				} else if len > $rem.len() {
 					*off = matched.len();
-					M::err(|| MatchError::incomplete($expected, *off))
+					M::err(|| MatchError::incomplete(self.expected(), *off))
 				} else {
-					M::err(|| MatchError::mismatch($expected, *off))
+					M::err(|| MatchError::mismatch(self.expected(), *off))
 				}
+			}
+			fn expected(&self) -> Expected {
+				let $matcher = self;
+				$expected
 			}
 		}
 	};
@@ -68,6 +76,9 @@ macro_rules! impl_ref {
 				&self, matched: &'a str, off: &mut usize,
 			) -> MatchResult<Self::Capture<'a>, M> {
 				AsRef::<str>::as_ref(self).do_match::<M>(matched, off)
+			}
+			fn expected(&self) -> Expected {
+				AsRef::<str>::as_ref(self).expected()
 			}
 		})+
 	};

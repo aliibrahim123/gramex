@@ -29,9 +29,11 @@ impl CapContainer {
 	pub fn wrap_type(self, mut result: &mut TokenStream, item: impl ToTokens) {
 		match self {
 			Self::None => item.to_tokens(result),
-			Self::Option => chunk!(result, Option<#item> ),
-			Self::Vec => chunk!(result, Vec<#item> ),
-			Self::OptionVec => chunk!(result, Option<Vec<#item>> ),
+			Self::Option => chunk!(result, ::core::option::Option<#item> ),
+			Self::Vec => chunk!(result, ::gramex::__private::Vec<#item> ),
+			Self::OptionVec => {
+				chunk!(result, ::core::option::Option<::gramex::__private::Vec<#item>> )
+			}
 		}
 	}
 }
@@ -202,11 +204,11 @@ fn resolve_struct_capture(
 			# #[derive(Debug)]
 			pub struct #item<'a> {
 				#for CapChild { name, resolved_type, container } in &_self.children #{
-					pub #name: #do {container.wrap_type(stream, resolved_type)},
+					pub #name: #do { container.wrap_type(stream, resolved_type) },
 				}
-				# #[doc(hidden)] pub __life_marker: #do {life_marker(stream)
-			},
-		})
+				# #[doc(hidden)] pub __life_marker: #do { life_marker(stream) },
+			}
+		)
 	} else if let Create::Enum(_) = create {
 		err!(ctx, "expected root or expression for generated enum", cap.ident.span());
 		return Err(());
@@ -216,7 +218,7 @@ fn resolve_struct_capture(
 	if matches!(cap.ty, CapType::Inherited) {
 		if parent.is_generated {
 			*resolved_type = quote! { ( #for child in &_self.children #{
-				#do {child.container.wrap_type(__stream, &child.resolved_type)},
+				#do { child.container.wrap_type(__stream, &child.resolved_type) },
 			})}
 		}
 		Ok(CapKind::Tuple(fields(_self)))
@@ -246,7 +248,7 @@ fn resolve_enum_variant(
 		}
 
 		if let Some(mut def) = variants_def.as_mut() {
-			chunk!(def, #{pascal_case(name)}(#do {container.wrap_type(def, resolved_type)}),)
+			chunk!(def, #{pascal_case(name)}(#do { container.wrap_type(def, resolved_type) }),)
 		}
 	}
 	child.map(|c| c.name)
@@ -271,10 +273,10 @@ fn resolve_enum_capture(
 			# #[derive(Debug)]
 			pub enum #item<'a> {
 				#if has_none #{ None, }
-				#do {stream.extend(variants_def.unwrap())}
-				# #[doc(hidden)] __LifeMarker #do {life_marker(stream)
-			},
-		})
+				#do { stream.extend(variants_def.unwrap()) }
+				# #[doc(hidden)] __LifeMarker #do { life_marker(stream) },
+			}
+		)
 	} else if let Create::Struct(_) = create {
 		err!(ctx, "expected root non or expression for generated struct", ident.span());
 		return Err(());

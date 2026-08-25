@@ -11,5 +11,9 @@ documentation = "https://docs.rs/gramex/"
 [lib]
 doctest = false
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 gramex-macro = { version = "0.1.0", path = "../macro" }

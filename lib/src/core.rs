@@ -1,7 +1,7 @@
-use std::marker::PhantomData;
+use core::{marker::PhantomData, ops::Range};
 
 use crate::{
-	MatchResult,
+	Expected, MatchResult,
 	result::{IntoResult, MatchError},
 };
 
@@ -11,12 +11,11 @@ pub trait MatchAble {
 		Self: 'a;
 
 	fn len(&self) -> usize;
-	fn slice<'a>(&'a self, range: std::ops::Range<usize>) -> Option<Self::Slice<'a>>;
+	fn slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>>;
 	fn skip_n(&self, off: &mut usize, n: usize) -> bool {
-		let new_ind = *off + n;
 		let len = self.len();
-		let overflowed = new_ind >= len;
-		*off = if overflowed { len } else { new_ind };
+		let overflowed = *off + n > len;
+		*off = if overflowed { len } else { *off + n };
 		!overflowed
 	}
 }
@@ -118,6 +117,10 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	}
 	fn parse<'a>(&self, matched: &'a T, off: &mut usize) -> Result<Self::Capture<'a>, MatchError> {
 		self.do_match::<Parse>(matched, off)
+	}
+
+	fn expected(&self) -> Expected {
+		Expected::None
 	}
 }
 

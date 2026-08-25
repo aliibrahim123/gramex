@@ -1,9 +1,6 @@
-use std::{
-	borrow::Cow,
-	fmt::{Debug, Display},
-};
-
 use crate::{MatchAble, Mode};
+use alloc_crate::{borrow::Cow, vec::Vec};
+use core::fmt::{Debug, Display};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Expected {
@@ -14,7 +11,7 @@ pub enum Expected {
 	Between(Cow<'static, str>, Cow<'static, str>),
 }
 impl Display for Expected {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
 		match self {
 			Self::None => write!(f, ""),
 			Self::A(thing) => write!(f, "expected {thing}"),
@@ -38,7 +35,7 @@ pub enum MatchErrorKind {
 	Other(Cow<'static, str>),
 }
 impl Display for MatchErrorKind {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
 		match self {
 			Self::MisMatch(expected) => match expected {
 				Expected::None => write!(f, "mismatch"),
@@ -78,11 +75,11 @@ impl Display for MatchError
 where
 	usize: Display,
 {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
 		write!(f, "{} at {}", self.kind, self.off)
 	}
 }
-impl std::error::Error for MatchError where usize: Display + Debug {}
+impl core::error::Error for MatchError where usize: Display + Debug {}
 
 #[allow(type_alias_bounds)]
 pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;

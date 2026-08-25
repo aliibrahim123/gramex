@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "chunked-quote"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6c80798e7500860fd3bb6cc8f38fb09e95b4a69653c85d101ecece76fd2f1b9"
+checksum = "3f72915e740d7ce158c314b45a7c44524f93f36d12a18fc7fb860f71f516c414"
 dependencies = [
  "chunked-quote-impl",
  "proc-macro2",
@@ -15,9 +15,9 @@ dependencies = [
 
 [[package]]
 name = "chunked-quote-impl"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "931725c1d052f8990a5778e5ce604c4deff70d3ceabc02e36818dc1d26546400"
+checksum = "9f7f6212ff24a4d811aff35f8a0f29a1915b1399ac3f41f12d1c796f453214d8"
 dependencies = [
  "proc-macro2",
  "quote",

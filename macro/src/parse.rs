@@ -27,7 +27,7 @@ impl Rep {
 	fn exact(n: u32) -> Self {
 		Self(n, n)
 	}
-	fn is_exact(self) -> bool {
+	pub fn is_exact(self) -> bool {
 		self.0 == self.1
 	}
 }
