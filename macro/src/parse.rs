@@ -6,7 +6,7 @@ use proc_macro2::{
 
 use crate::{
 	capture::CapInfo,
-	cursor::{Cursor, Error, err},
+	cursor::{Cursor, Error, err, ident},
 };
 
 /// repetition specifiers
@@ -77,7 +77,7 @@ pub struct Capture {
 impl Default for Capture {
 	fn default() -> Self {
 		Self {
-			ident: Ident::new("default", Span::call_site()),
+			ident: ident!("default"),
 			rep: Rep::ONCE,
 			ty: CapType::Inherited,
 			map: None,
@@ -244,7 +244,8 @@ fn try_parse_capture(cur: &mut Cursor, flags_span: Option<Span>) -> Option<Expr>
 	let Some(ident) = cur.try_ident() else { return None };
 	let rep = parse_rep(cur);
 
-	if !cur.test_punct('=') && !(cur.test_punct(':') && !cur.test_multi_punct([':', ':'])) {
+	if !cur.test_punct('=') && !(cur.test_punct(':') && !cur.test_multi_punct([':', ':']))
+	{
 		cur.rewind(start);
 		return None;
 	}
@@ -268,7 +269,9 @@ fn try_parse_capture(cur: &mut Cursor, flags_span: Option<Span>) -> Option<Expr>
 	Some(Expr::Capture(Box::new(cap)))
 }
 
-fn parse_range(cur: &mut Cursor, atom: Atom, not: bool, near: bool, flags_span: Span) -> Expr {
+fn parse_range(
+	cur: &mut Cursor, atom: Atom, not: bool, near: bool, flags_span: Span,
+) -> Expr {
 	let Atom::Matcher(left) = atom else {
 		err!(cur, "expected a value atom", flags_span);
 		return Expr::Unit { not, near, rep: Rep::ONCE, atom };
@@ -287,7 +290,9 @@ fn parse_range(cur: &mut Cursor, atom: Atom, not: bool, near: bool, flags_span: 
 				Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom },
 			]);
 		}
-		None => return Expr::Unit { not, near, rep: Rep::ONCE, atom: Atom::Matcher(left) },
+		None => {
+			return Expr::Unit { not, near, rep: Rep::ONCE, atom: Atom::Matcher(left) };
+		}
 	};
 
 	Expr::Range(left, right)
@@ -301,7 +306,9 @@ fn parse_expr_primary(cur: &mut Cursor) -> Expr {
 	let not = cur.try_punct('!');
 	let near = cur.try_punct('~');
 	let atom = if let Some(mut cur) = cur.try_enter_group(Parenthesis) {
-		if let Some(expr) = try_parse_capture(&mut cur, (not | near).then_some(flags_span)) {
+		if let Some(expr) =
+			try_parse_capture(&mut cur, (not | near).then_some(flags_span))
+		{
 			return expr;
 		}
 		let expr = parse_expr(&mut cur);
@@ -323,8 +330,8 @@ fn parse_expr_primary(cur: &mut Cursor) -> Expr {
 }
 
 fn parse_chain(
-	cur: &mut Cursor, parse_item: impl Fn(&mut Cursor) -> Expr, sep: impl Fn(&mut Cursor) -> bool,
-	item: impl Fn(Vec<Expr>) -> Expr,
+	cur: &mut Cursor, parse_item: impl Fn(&mut Cursor) -> Expr,
+	sep: impl Fn(&mut Cursor) -> bool, item: impl Fn(Vec<Expr>) -> Expr,
 ) -> Expr {
 	let expr = parse_item(cur);
 	if !sep(cur) {
@@ -384,26 +391,20 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 	let mut expr = parse_expr(cur);
 	let map = match cur.try_multi_punct(['=', '>']) {
 		true => cur.eat_until("a expr", |cur| {
-			if inside_call { cur.test_punct(',') || cur.test_punct('>') } else { cur.is_end() }
+			if inside_call {
+				cur.test_punct(',') || cur.test_punct('>')
+			} else {
+				cur.is_end()
+			}
 		}),
 		false => None,
 	};
 
-	let ident = Ident::new("root", Span::call_site());
+	let ident = ident!("root");
 	let cap = Capture { ident, map, expr, ..Default::default() };
 	expr = Expr::Capture(Box::new(cap));
 
 	Matcher { matched_type, expr }
-}
-
-/// term optmize attribute
-///
-/// **grammer**: ('#' -> '[' "optimize" '(' list<"check" | "test" | "inline", ','> ')' ']')
-#[derive(Debug, Clone, Default)]
-pub struct TermOptimize {
-	pub check: bool,
-	pub test: bool,
-	pub inline: bool,
 }
 
 /// a term in gramex macro
@@ -416,7 +417,6 @@ pub struct TermOptimize {
 pub struct Term {
 	pub name: Ident,
 	pub args: Vec<Ident>,
-	pub optimize: TermOptimize,
 	pub expr: Expr,
 }
 
@@ -429,38 +429,6 @@ pub struct Term {
 pub struct GrammarDecl {
 	pub matched_type: TokenStream,
 	pub terms: Vec<Term>,
-}
-
-fn parse_term_optimize(cur: &mut Cursor) -> TermOptimize {
-	let mut optmize = TermOptimize::default();
-	if !cur.try_punct('#') {
-		return optmize;
-	};
-	let Some(mut cur) = cur.enter_group(Bracket) else { return optmize };
-	if cur.tokens.len() > 2 {
-		cur.expected("`]`");
-	}
-
-	if cur.kw("optimize").is_some() {
-		let Some(mut cur) = cur.enter_group(Parenthesis) else { return optmize };
-		loop {
-			if cur.try_kw("check") {
-				optmize.check = true;
-			} else if cur.try_kw("test") {
-				optmize.test = true;
-			} else if cur.try_kw("inline") {
-				optmize.inline = true;
-			} else {
-				cur.expected("one of `check`, `test`, `inline`");
-			}
-
-			cur.try_eat_until(|cur| cur.try_punct(','));
-			if cur.is_end() {
-				break;
-			}
-		}
-	}
-	optmize
 }
 
 fn parse_term_args(cur: &mut Cursor) -> Vec<Ident> {
@@ -482,13 +450,12 @@ fn parse_term_args(cur: &mut Cursor) -> Vec<Ident> {
 }
 
 fn try_parse_term(cur: &mut Cursor) -> Option<Term> {
-	let optimize = parse_term_optimize(cur);
 	if cur.kw("let").is_none() {
 		cur.skip();
 		return None;
 	}
 
-	let name = cur.ident().unwrap_or_else(|| Ident::new("_", Span::call_site()));
+	let name = cur.ident().unwrap_or_else(|| ident!("_"));
 	let args = parse_term_args(cur);
 
 	let ty = parse_capture_type(cur);
@@ -503,13 +470,14 @@ fn try_parse_term(cur: &mut Cursor) -> Option<Term> {
 	expr = Expr::Capture(Box::new(cap));
 	cur.punct(';');
 
-	Some(Term { name, args, optimize, expr })
+	Some(Term { name, args, expr })
 }
 
 pub fn parse_grammer_decl(cur: &mut Cursor) -> GrammarDecl {
 	cur.kw("for");
 	let unit_type = || quote!(());
-	let matched_type = cur.eat_until("a type", |cur| cur.test_punct(';')).unwrap_or_else(unit_type);
+	let matched_type =
+		cur.eat_until("a type", |cur| cur.test_punct(';')).unwrap_or_else(unit_type);
 	cur.punct(';');
 
 	let mut terms = Vec::new();

@@ -115,7 +115,9 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	fn capture<'a>(&self, matched: &'a T, off: &mut usize) -> Option<Self::Capture<'a>> {
 		self.do_match::<Capture>(matched, off).ok()
 	}
-	fn parse<'a>(&self, matched: &'a T, off: &mut usize) -> Result<Self::Capture<'a>, MatchError> {
+	fn parse<'a>(
+		&self, matched: &'a T, off: &mut usize,
+	) -> Result<Self::Capture<'a>, MatchError> {
 		self.do_match::<Parse>(matched, off)
 	}
 

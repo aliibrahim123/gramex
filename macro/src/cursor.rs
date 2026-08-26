@@ -3,8 +3,20 @@
 use std::{fmt::Display, str::FromStr};
 
 use chunked_quote::chunk_spanned;
-use proc_macro2::{Delimiter, Group, Ident, Literal, Spacing, Span, TokenStream, TokenTree};
+use proc_macro2::{
+	Delimiter, Group, Ident, Literal, Spacing, Span, TokenStream, TokenTree,
+};
 use quote::ToTokens;
+
+macro_rules! ident {
+	($format:literal, span = $span:ident, $($t:tt)*) => {
+		Ident::new(&format!($format, $($t)*), $span)
+	};
+	($format:literal $($t:tt)*) => {
+		Ident::new(&format!($format $($t)*), Span::call_site())
+	};
+}
+pub(crate) use ident;
 
 /// reducing boilerplate of parsing [`TokenStream`].
 #[derive(Debug)]
@@ -15,7 +27,9 @@ pub struct Cursor<'a> {
 	pub errors: &'a mut Vec<Error>,
 }
 impl Cursor<'_> {
-	pub fn new<'a>(stream: TokenStream, end_span: Span, errors: &'a mut Vec<Error>) -> Cursor<'a> {
+	pub fn new<'a>(
+		stream: TokenStream, end_span: Span, errors: &'a mut Vec<Error>,
+	) -> Cursor<'a> {
 		Cursor { tokens: stream.into_iter().collect(), ind: 0, end_span, errors }
 	}
 	pub fn peek_next(&self, n: usize) -> Option<&TokenTree> {
@@ -75,9 +89,13 @@ impl Cursor<'_> {
 		punct.as_char() == char
 	}
 	/// eat multiple [`Punct`]s of specific characters
-	pub fn multi_punct<const N: usize>(&mut self, chars: [char; N]) -> Option<TokenStream> {
+	pub fn multi_punct<const N: usize>(
+		&mut self, chars: [char; N],
+	) -> Option<TokenStream> {
 		if self.try_multi_punct(chars) {
-			Some(TokenStream::from_iter(self.tokens[self.ind - N..self.ind].iter().cloned()))
+			Some(TokenStream::from_iter(
+				self.tokens[self.ind - N..self.ind].iter().cloned(),
+			))
 		} else {
 			let chars = chars.iter().collect::<String>();
 			err!(self, "expected `{chars}");
