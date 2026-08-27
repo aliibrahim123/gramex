@@ -18,6 +18,19 @@ pub trait MatchAble {
 		*off = if overflowed { len } else { *off + n };
 		!overflowed
 	}
+
+	#[doc(hidden)]
+	fn __len(&self) -> usize {
+		self.len()
+	}
+	#[doc(hidden)]
+	fn __slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>> {
+		self.slice(range)
+	}
+	#[doc(hidden)]
+	fn __skip_n(&self, off: &mut usize, n: usize) -> bool {
+		self.skip_n(off, n)
+	}
 }
 
 pub trait Mode {
@@ -32,8 +45,17 @@ pub trait Mode {
 	type WithoutCapture: Mode;
 	type WithoutError: Mode;
 
-	fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
-	fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
+	fn ok<T>(cap: T) -> MatchResult<T, Self>;
+	fn err<T>(err: MatchError) -> MatchResult<T, Self>;
+	fn ok_with<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
+	fn err_with<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
+
+	fn unwrap_success<T>(val: Self::Success<T>) -> T {
+		panic!("unwrap_success called on no-capture mode")
+	}
+	fn unwrap_error(val: Self::Error) -> MatchError {
+		panic!("unwrap_error called on no-error mode")
+	}
 }
 
 macro_rules! decl_mod {
@@ -62,18 +84,25 @@ macro_rules! decl_mod {
 				type WithoutCapture = $minus_cap;
 				type WithoutError = $minus_err;
 
-				$($cap_true fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
+				$($cap_true fn ok<T>(cap: T) -> MatchResult<T, Self> { Ok(cap) })?
+				$($cap_false fn ok<T>(_cap: T) -> MatchResult<T, Self> { Ok(()) })?
+				$($err_true fn err<T>(err: MatchError) -> MatchResult<T, Self> { Err(err) })?
+				$($err_false fn err<T>(_err: MatchError) -> MatchResult<T, Self> { Err(()) })?
+				$($cap_true fn ok_with<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
 					Ok(cap())
 				})?
-				$($cap_false fn ok<T>(_cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
+				$($cap_false fn ok_with<T>(_cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
 					Ok(())
 				})?
-				$($err_true fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
+				$($err_true fn err_with<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
 					Err(err())
 				})?
-				$($err_false fn err<T>(_err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
+				$($err_false fn err_with<T>(_err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
 					Err(())
 				})?
+
+				$($cap_true fn unwrap_success<T>(val: Self::Success<T>) -> T { val })?
+				$($err_true fn unwrap_error(val: Self::Error) -> MatchError { val })?
 			}
 		};
 	}
@@ -123,6 +152,18 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 
 	fn expected(&self) -> Expected {
 		Expected::None
+	}
+
+	#[doc(hidden)]
+	fn __do_match<'a, M: Mode>(
+		&self, matched: &'a T, off: &mut usize,
+	) -> MatchResult<Self::Capture<'a>, M> {
+		self.do_match::<M>(matched, off)
+	}
+
+	#[doc(hidden)]
+	fn __expected(&self) -> Expected {
+		self.expected()
 	}
 }
 

@@ -18,4 +18,11 @@ pub mod modes {
 pub mod __private {
 	pub use alloc_crate::vec::Vec;
 	pub use alloc_crate::{format, vec};
+
+	pub fn unwrap_result<T, E>(r: Result<T, E>) -> T {
+		match r {
+			Ok(v) => v,
+			Err(_) => unreachable!(),
+		}
+	}
 }

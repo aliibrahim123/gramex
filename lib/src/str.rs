@@ -42,12 +42,12 @@ macro_rules! define_matcher {
 				let (res, len) = $logic;
 				if res {
 					*off += len;
-					M::ok(|| &$rem[..len])
+					M::ok_with(|| &$rem[..len])
 				} else if len > $rem.len() {
 					*off = matched.len();
-					M::err(|| MatchError::incomplete(self.expected(), *off))
+					M::err_with(|| MatchError::incomplete(self.expected(), *off))
 				} else {
-					M::err(|| MatchError::mismatch(self.expected(), *off))
+					M::err_with(|| MatchError::mismatch(self.expected(), *off))
 				}
 			}
 			fn expected(&self) -> Expected {
@@ -88,7 +88,7 @@ impl_ref![String, Box<str>, Rc<str>, Arc<str>, #for<'b> Cow<'b, str>];
 define_matcher!(RangeInclusive<char>,
 	(matcher, rem) => match rem.chars().next() {
 		Some(c) => (matcher.contains(&c), c.len_utf8()),
-		_ => (false, 4),
+		_ => (false, 0),
 	},
 	Expected::Between(
 		format!("{}", matcher.start()).into(),

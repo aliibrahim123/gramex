@@ -9,7 +9,7 @@ use proc_macro2::{
 use quote::ToTokens;
 
 macro_rules! ident {
-	($format:literal, span = $span:ident, $($t:tt)*) => {
+	($format:literal, span = $span:expr, $($t:tt)*) => {
 		Ident::new(&format!($format, $($t)*), $span)
 	};
 	($format:literal $($t:tt)*) => {

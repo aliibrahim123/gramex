@@ -1,5 +1,5 @@
 use chunked_quote::{chunk, quote};
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
 use rustc_hash::FxHashSet;
 
@@ -13,8 +13,8 @@ pub enum CapKind {
 	Normal { need_from: bool },
 	Atomic { need_from: bool },
 	Tuple(Vec<CapChild>),
-	Struct(Vec<CapChild>),
-	Enum(Vec<Option<Ident>>),
+	Struct { fields: Vec<CapChild>, is_generated: bool },
+	Enum(Vec<Option<CapChild>>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum CapContainer {
@@ -185,7 +185,7 @@ fn resolve_capture_type(
 			return Err(());
 		}
 
-		Ok((quote! { captures::#item_ident<'a> }, create(item_ident)))
+		Ok((quote! { captures::#item_ident::<'a> }, create(item_ident)))
 	};
 
 	match &mut cap.ty {
@@ -196,10 +196,6 @@ fn resolve_capture_type(
 	}
 }
 
-fn life_marker(stream: &mut TokenStream) {
-	chunk!(stream, (::std::marker::PhantomData<&'a ()>, ::std::convert::Infallible));
-}
-
 fn resolve_struct_capture(
 	cap: &mut Capture, resolved_type: &mut TokenStream, create: Create,
 	parent: &CapParent, ctx: &mut Context,
@@ -207,6 +203,7 @@ fn resolve_struct_capture(
 	let mut _self = CapParent::new(matches!(create, Create::Struct(_)));
 	resolve_captures(&mut cap.expr, false, &mut _self, ctx);
 
+	let is_generated = matches!(create, Create::Struct(_));
 	if let Create::Struct(item) = create {
 		let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
 		chunk!(stream,
@@ -215,7 +212,7 @@ fn resolve_struct_capture(
 				#for CapChild { name, resolved_type, container } in &_self.children #{
 					pub #name: #do { container.wrap_type(stream, resolved_type) },
 				}
-				# #[doc(hidden)] pub __life_marker: #do { life_marker(stream) },
+				# #[doc(hidden)] pub __life_marker: ::std::marker::PhantomData<&'a ()>,
 			}
 		)
 	} else if let Create::Enum(_) = create {
@@ -232,14 +229,14 @@ fn resolve_struct_capture(
 		}
 		Ok(CapKind::Tuple(_self.children))
 	} else {
-		Ok(CapKind::Struct(_self.children))
+		Ok(CapKind::Struct { fields: _self.children, is_generated })
 	}
 }
 
 fn resolve_enum_variant(
 	expr: &mut Expr, variant_names: &mut FxHashSet<String>,
 	variants_def: &mut Option<TokenStream>, ctx: &mut Context,
-) -> Option<Ident> {
+) -> Option<CapChild> {
 	let mut parent = CapParent::new(true);
 	resolve_captures(expr, false, &mut parent, ctx);
 
@@ -259,7 +256,7 @@ fn resolve_enum_variant(
 			chunk!(def, #{pascal_case(name)}(#do { container.wrap_type(def, resolved_type) }),)
 		}
 	}
-	child.map(|child| child.name)
+	child
 }
 
 fn resolve_enum_capture(
@@ -288,7 +285,9 @@ fn resolve_enum_capture(
 			pub enum #item<'a> {
 				#if has_none #{ None, }
 				#do { stream.extend(variants_def.unwrap()) }
-				# #[doc(hidden)] __LifeMarker #do { life_marker(stream) },
+				# #[doc(hidden)] __LifeMarker (
+					::std::marker::PhantomData<&'a ()>, ::std::convert::Infallible
+				),
 			}
 		)
 	} else if let Create::Struct(_) = create {
@@ -310,7 +309,7 @@ fn is_atomic_capture(expr: &Expr) -> bool {
 fn resolve_leaf_capture(
 	cap: &mut Capture, create: Create, ctx: &mut Context,
 ) -> Result<CapKind, ()> {
-	let need_from = matches!(cap.ty, CapType::Inherited) && cap.map.is_none();
+	let need_from = matches!(cap.ty, CapType::Explicit(_)) && cap.map.is_none();
 	Ok(match create {
 		Create::Struct(item) => {
 			let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
@@ -318,7 +317,7 @@ fn resolve_leaf_capture(
 				# #[derive(Debug)]
 				pub struct #item<'a> (#{default_cap(ctx.matched_type)});
 			);
-			CapKind::Struct(Vec::new())
+			CapKind::Struct { fields: Vec::new(), is_generated: true }
 		}
 		Create::Enum(ident) => {
 			err!(ctx, "expected root or expression for generated enum", ident.span());
@@ -393,32 +392,23 @@ pub fn pascal_case(ident: &Ident) -> Ident {
 	Ident::new(&res, ident.span())
 }
 
-#[derive(Debug, Clone)]
-pub struct AnalyzeResult {
-	pub has_captures: bool,
-}
-
-pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) -> AnalyzeResult {
-	if matcher.matched_type.is_none() {
-		matcher.matched_type = ctx.matched_type.as_ref().map(|t| (*t).clone());
-	}
+pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) {
+	let Some(matched_type) = ctx.matched_type else {
+		let msg = "expected specified matched type for matchers arguments";
+		err!(ctx, msg, Span::call_site());
+		return;
+	};
+	let matched_type = matcher.matched_type.get_or_insert_with(|| matched_type.clone());
 	let mut ctx = Context {
-		matched_type: matcher.matched_type.as_ref(),
+		matched_type: Some(matched_type),
 		capture_mod: ctx.capture_mod.as_deref_mut(),
 		errors: ctx.errors,
 	};
 
-	let root_expr =
-		if let Expr::Capture(cap) = &matcher.expr { &cap.expr } else { &matcher.expr };
-	if has_capture(root_expr) {
-		resolve_captures(&mut matcher.expr, false, &mut CapParent::new(false), &mut ctx);
-		AnalyzeResult { has_captures: true }
-	} else {
-		AnalyzeResult { has_captures: false }
-	}
+	resolve_captures(&mut matcher.expr, false, &mut CapParent::new(false), &mut ctx);
 }
 
-pub fn analyze_term(term: &mut Term, ctx: &mut Context) -> AnalyzeResult {
+pub fn analyze_term(term: &mut Term, ctx: &mut Context) {
 	let Term { args, expr, .. } = term;
 	let mut arg_names = FxHashSet::default();
 	for i in 0..args.len() {
@@ -428,14 +418,5 @@ pub fn analyze_term(term: &mut Term, ctx: &mut Context) -> AnalyzeResult {
 		}
 	}
 
-	let Expr::Capture(root_cap) = &expr else { unreachable!() };
-	if !matches!(root_cap.ty, CapType::Inherited)
-		|| root_cap.map.is_some()
-		|| has_capture(&root_cap.expr)
-	{
-		resolve_captures(expr, false, &mut CapParent::new(true), ctx);
-		AnalyzeResult { has_captures: true }
-	} else {
-		AnalyzeResult { has_captures: false }
-	}
+	resolve_captures(expr, false, &mut CapParent::new(true), ctx);
 }

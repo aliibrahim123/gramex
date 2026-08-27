@@ -92,8 +92,8 @@ impl IntoResult for bool {
 	type Output = ();
 	fn into_result<M: Mode>(self, off: usize) -> MatchResult<(), M> {
 		match self {
-			true => M::ok(|| ()),
-			false => M::err(|| MatchError::mismatch(Expected::None, off)),
+			true => M::ok_with(|| ()),
+			false => M::err_with(|| MatchError::mismatch(Expected::None, off)),
 		}
 	}
 }
@@ -101,8 +101,8 @@ impl<T> IntoResult for Option<T> {
 	type Output = T;
 	fn into_result<M: Mode>(self, off: usize) -> MatchResult<T, M> {
 		match self {
-			Some(v) => M::ok(|| v),
-			None => M::err(|| MatchError::mismatch(Expected::None, off)),
+			Some(v) => M::ok_with(|| v),
+			None => M::err_with(|| MatchError::mismatch(Expected::None, off)),
 		}
 	}
 }
@@ -110,8 +110,8 @@ impl<T> IntoResult for Result<T, MatchError> {
 	type Output = T;
 	fn into_result<M: Mode>(self, _off: usize) -> MatchResult<T, M> {
 		match self {
-			Ok(v) => M::ok(|| v),
-			Err(e) => M::err(|| e),
+			Ok(v) => M::ok_with(|| v),
+			Err(e) => M::err_with(|| e),
 		}
 	}
 }

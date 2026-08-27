@@ -5,6 +5,7 @@ use proc_macro2::Span;
 use crate::{
 	capture::{CapMod, analyze_term},
 	cursor::Cursor,
+	generate::gen_term,
 	parse::{parse_expr, parse_grammer_decl},
 };
 
@@ -33,15 +34,17 @@ pub fn gramex(input: TokenStream) -> TokenStream {
 		errors: &mut errors,
 		matched_type: Some(&decl.matched_type),
 	};
+	let mut stream = TokenStream::new().into();
 	for term in &mut decl.terms {
 		analyze_term(term, &mut ctx);
+		gen_term(&mut stream, term, &decl.matched_type);
 	}
 
-	let res = format!("{decl:#?}");
 	quote! {
 		#for e in errors #{#e}
-		mod captures {use super::*; #{cap_mod.stream}}
-		const res: &'static str = #res;
+		# #[allow(nonstandard_style)]
+		pub mod captures {use super::*; #{cap_mod.stream}}
+		#stream
 	}
 	.into()
 }
