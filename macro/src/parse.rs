@@ -1,7 +1,7 @@
 use chunked_quote::quote;
 use proc_macro2::{
 	Delimiter::{self, Brace, Bracket, Parenthesis},
-	Group, Ident, Literal, Spacing, Span, TokenStream, TokenTree,
+	Group, Ident, Span, TokenStream, TokenTree,
 };
 
 use crate::{

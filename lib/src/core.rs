@@ -6,12 +6,12 @@ use crate::{
 };
 
 pub trait MatchAble {
-	type Slice<'a>
+	type Slice<'src>
 	where
-		Self: 'a;
+		Self: 'src;
 
 	fn len(&self) -> usize;
-	fn slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>>;
+	fn slice<'src>(&'src self, range: Range<usize>) -> Option<Self::Slice<'src>>;
 	fn skip_n(&self, off: &mut usize, n: usize) -> bool {
 		let len = self.len();
 		let overflowed = *off + n > len;
@@ -24,7 +24,7 @@ pub trait MatchAble {
 		self.len()
 	}
 	#[doc(hidden)]
-	fn __slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>> {
+	fn __slice<'src>(&'src self, range: Range<usize>) -> Option<Self::Slice<'src>> {
 		self.slice(range)
 	}
 	#[doc(hidden)]
@@ -51,9 +51,11 @@ pub trait Mode {
 	fn err_with<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
 
 	fn unwrap_success<T>(val: Self::Success<T>) -> T {
+		let _ = val;
 		panic!("unwrap_success called on no-capture mode")
 	}
 	fn unwrap_error(val: Self::Error) -> MatchError {
+		let _ = val;
 		panic!("unwrap_error called on no-error mode")
 	}
 }
@@ -128,12 +130,12 @@ decl_mod!(Parse {
 });
 
 pub trait Matcher<T: MatchAble + ?Sized> {
-	type Capture<'a>
+	type Capture<'src>
 	where
-		T: 'a;
-	fn do_match<'a, M: Mode>(
-		&self, matched: &'a T, off: &mut usize,
-	) -> MatchResult<Self::Capture<'a>, M>;
+		T: 'src;
+	fn do_match<'src, M: Mode>(
+		&self, matched: &'src T, off: &mut usize,
+	) -> MatchResult<Self::Capture<'src>, M>;
 
 	fn test(&self, matched: &T, off: &mut usize) -> bool {
 		self.do_match::<Test>(matched, off).is_ok()
@@ -141,12 +143,14 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	fn check(&self, matched: &T, off: &mut usize) -> Result<(), MatchError> {
 		self.do_match::<Check>(matched, off)
 	}
-	fn capture<'a>(&self, matched: &'a T, off: &mut usize) -> Option<Self::Capture<'a>> {
+	fn capture<'src>(
+		&self, matched: &'src T, off: &mut usize,
+	) -> Option<Self::Capture<'src>> {
 		self.do_match::<Capture>(matched, off).ok()
 	}
-	fn parse<'a>(
-		&self, matched: &'a T, off: &mut usize,
-	) -> Result<Self::Capture<'a>, MatchError> {
+	fn parse<'src>(
+		&self, matched: &'src T, off: &mut usize,
+	) -> Result<Self::Capture<'src>, MatchError> {
 		self.do_match::<Parse>(matched, off)
 	}
 
@@ -155,9 +159,9 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	}
 
 	#[doc(hidden)]
-	fn __do_match<'a, M: Mode>(
-		&self, matched: &'a T, off: &mut usize,
-	) -> MatchResult<Self::Capture<'a>, M> {
+	fn __do_match<'src, M: Mode>(
+		&self, matched: &'src T, off: &mut usize,
+	) -> MatchResult<Self::Capture<'src>, M> {
 		self.do_match::<M>(matched, off)
 	}
 
@@ -168,21 +172,21 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 }
 
 #[doc(hidden)]
-pub trait LifedMatchFn<'a, T: MatchAble + ?Sized + 'a> {
-	type Capture: 'a;
+pub trait LifedMatchFn<'src, T: MatchAble + ?Sized + 'src> {
+	type Capture: 'src;
 	type Res: IntoResult<Output = Self::Capture>;
-	fn call(&self, matched: &'a T, off: &mut usize) -> Self::Res;
+	fn call(&self, matched: &'src T, off: &mut usize) -> Self::Res;
 }
 
-impl<'a, T: MatchAble + ?Sized + 'a, R, F> LifedMatchFn<'a, T> for F
+impl<'src, T: MatchAble + ?Sized + 'src, R, F> LifedMatchFn<'src, T> for F
 where
-	F: Fn(&'a T, &mut usize) -> R,
+	F: Fn(&'src T, &mut usize) -> R,
 	R: IntoResult,
-	<R as IntoResult>::Output: 'a,
+	<R as IntoResult>::Output: 'src,
 {
 	type Capture = <R as IntoResult>::Output;
 	type Res = R;
-	fn call(&self, matched: &'a T, off: &mut usize) -> R {
+	fn call(&self, matched: &'src T, off: &mut usize) -> R {
 		self(matched, off)
 	}
 }
@@ -194,7 +198,7 @@ pub struct MatchFn<T: MatchAble + ?Sized, F> {
 }
 impl<T: MatchAble + ?Sized, F> MatchFn<T, F>
 where
-	F: for<'a> LifedMatchFn<'a, T>,
+	F: for<'src> LifedMatchFn<'src, T>,
 {
 	pub fn new(fun: F) -> Self {
 		Self { fun, _marker: PhantomData }
@@ -202,16 +206,16 @@ where
 }
 impl<T: MatchAble + ?Sized, F> Matcher<T> for MatchFn<T, F>
 where
-	F: for<'a> LifedMatchFn<'a, T>,
+	F: for<'src> LifedMatchFn<'src, T>,
 {
-	type Capture<'a>
-		= <F as LifedMatchFn<'a, T>>::Capture
+	type Capture<'src>
+		= <F as LifedMatchFn<'src, T>>::Capture
 	where
-		T: 'a;
+		T: 'src;
 
-	fn do_match<'a, M: Mode>(
-		&self, matched: &'a T, off: &mut usize,
-	) -> MatchResult<Self::Capture<'a>, M> {
+	fn do_match<'src, M: Mode>(
+		&self, matched: &'src T, off: &mut usize,
+	) -> MatchResult<Self::Capture<'src>, M> {
 		LifedMatchFn::call(&self.fun, matched, off).into_result::<M>(*off)
 	}
 }

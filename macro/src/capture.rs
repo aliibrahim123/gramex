@@ -23,7 +23,6 @@ pub enum CapContainer {
 	None,
 	Option,
 	Vec,
-	OptionVec,
 }
 impl CapContainer {
 	pub fn wrap_type(self, mut result: &mut TokenStream, item: impl ToTokens) {
@@ -31,9 +30,6 @@ impl CapContainer {
 			Self::None => item.to_tokens(result),
 			Self::Option => chunk!(result, ::core::option::Option<#item> ),
 			Self::Vec => chunk!(result, ::gramex::__private::Vec<#item> ),
-			Self::OptionVec => {
-				chunk!(result, ::core::option::Option<::gramex::__private::Vec<#item>> )
-			}
 		}
 	}
 }
@@ -70,10 +66,10 @@ pub struct CapMod {
 }
 
 #[derive(Debug)]
-pub struct Context<'a> {
-	pub capture_mod: Option<&'a mut CapMod>,
-	pub matched_type: Option<&'a TokenStream>,
-	pub errors: &'a mut Vec<Error>,
+pub struct Context<'src> {
+	pub capture_mod: Option<&'src mut CapMod>,
+	pub matched_type: Option<&'src TokenStream>,
+	pub errors: &'src mut Vec<Error>,
 }
 
 fn resolve_captures(
@@ -164,7 +160,7 @@ fn has_capture(expr: &Expr) -> bool {
 
 fn default_cap(matched_type: Option<&TokenStream>) -> TokenStream {
 	if let Some(m) = matched_type {
-		quote! { <#m as ::gramex::MatchAble>::Slice<'a> }
+		quote! { <#m as ::gramex::MatchAble>::Slice<'src> }
 	} else {
 		TokenStream::new()
 	}
@@ -193,7 +189,7 @@ fn resolve_capture_type(
 			return Err(());
 		}
 
-		Ok((quote! { captures::#item_ident::<'a> }, create(item_ident)))
+		Ok((quote! { captures::#item_ident::<'src> }, create(item_ident)))
 	};
 
 	match &mut cap.ty {
@@ -216,11 +212,11 @@ fn resolve_struct_capture(
 		let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
 		chunk!(stream,
 			# #[derive(Debug)]
-			pub struct #item<'a> {
+			pub struct #item<'src> {
 				#for CapChild { name, resolved_type, container } in &_self.children #{
 					pub #name: #do { container.wrap_type(stream, resolved_type) },
 				}
-				# #[doc(hidden)] pub __life_marker: ::std::marker::PhantomData<&'a ()>,
+				# #[doc(hidden)] pub __life_marker: ::std::marker::PhantomData<&'src ()>,
 			}
 		)
 	} else if let Create::Enum(_) = create {
@@ -252,7 +248,13 @@ fn resolve_enum_variant(
 	variants_def: &mut Option<TokenStream>, ctx: &mut Context,
 ) -> Option<CapChild> {
 	let mut parent = CapParent::new(true);
-	resolve_captures(expr, false, &mut parent, ctx);
+	match expr {
+		Expr::Imply { cond, expr } => {
+			resolve_captures(cond, false, &mut parent, ctx);
+			resolve_captures(expr, false, &mut parent, ctx);
+		}
+		_ => resolve_captures(expr, false, &mut parent, ctx),
+	}
 
 	if parent.children.len() > 1 {
 		let msg = "an or branch in a capture enum must have at most one capture";
@@ -296,11 +298,11 @@ fn resolve_enum_capture(
 		let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
 		chunk!(stream,
 			# #[derive(Debug)]
-			pub enum #item<'a> {
+			pub enum #item<'src> {
 				#if has_none #{ None, }
 				#do { stream.extend(variants_def.unwrap()) }
 				# #[doc(hidden)] __LifeMarker (
-					::std::marker::PhantomData<&'a ()>, ::std::convert::Infallible
+					::std::marker::PhantomData<&'src ()>, ::std::convert::Infallible
 				),
 			}
 		)
@@ -329,9 +331,9 @@ fn resolve_leaf_capture(
 			let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
 			chunk!(stream,
 				# #[derive(Debug)]
-				pub struct #item<'a> (#{default_cap(ctx.matched_type)});
+				pub struct #item<'src> (pub #{default_cap(ctx.matched_type)});
 			);
-			CapKind::Struct { fields: Vec::new(), is_generated: true }
+			CapKind::UnitStruct
 		}
 		Create::Enum(ident) => {
 			err!(ctx, "expected root or expression for generated enum", ident.span());
@@ -382,8 +384,7 @@ fn resolve_capture(
 	let container = match (is_optional, cap.rep) {
 		(false, Rep::ONCE) => CapContainer::None,
 		(true, Rep::ONCE) | (_, Rep::OPTIONAL) => CapContainer::Option,
-		(false, _) => CapContainer::Vec,
-		(true, _) => CapContainer::OptionVec,
+		_ => CapContainer::Vec,
 	};
 
 	add_capture_child(cap, &resolved_type, container, parent, ctx)?;

@@ -88,7 +88,7 @@ fn gen_expected_atom(stream: &mut TokenStream, atom: &Atom) {
 fn gen_expected_not(mut stream: &mut TokenStream, thing: impl Fn(&mut TokenStream)) {
 	chunk!(stream, #do{}
 		::gramex::Expected::A(::gramex::__private::format!(
-			"not {}", #do { thing(stream) }.to_string()
+			"not {}", #do { thing(stream) }.value()
 		).into())
 	);
 }
@@ -98,7 +98,7 @@ fn gen_expected_or(stream: &mut TokenStream, exprs: &[Expr]) {
 	chunk!(stream, ::gramex::Expected::OneOf(
 		::gramex::__private::vec![
 			#for expr in exprs #{
-				#do { gen_expected(stream, expr) }.to_string().into(),
+				#do { gen_expected(stream, expr) }.value(),
 			}
 		]
 	));
@@ -359,8 +359,10 @@ fn gen_capture_unwrwap(
 ) {
 	chunk!(stream,
 		#{ident!("__cap__{ident}")}
-		#if matches!(container, CapContainer::None | CapContainer::Vec) #{
-			.unwrap()
+		#match container {
+			CapContainer::None => #{ .unwrap() },
+			CapContainer::Option => {},
+			CapContainer::Vec => #{ .unwrap_or_else(|| ::gramex::__private::Vec::new()) },
 		}
 	)
 }
@@ -369,7 +371,7 @@ fn gen_capture_set(mut stream: &mut TokenStream, ident: &Ident, container: CapCo
 	chunk!(stream,
 		#{ident!("__cap__{ident}")} #match container {
 			CapContainer::None | CapContainer::Option => #{ = Some(__cap) },
-			CapContainer::Vec | CapContainer::OptionVec => #{
+			CapContainer::Vec => #{
 				.get_or_insert_with(|| ::gramex::__private::Vec::new()).push(__cap)
 			},
 		};
@@ -534,7 +536,8 @@ fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 
 fn gen_matcher(
 	mut stream: &mut TokenStream, matcher_ident: &Ident, expr: &Expr,
-	matched_type: &TokenStream, args: &[&Ident], prologue: impl Fn(&mut TokenStream),
+	matched_type: &TokenStream, args: &[&Ident],
+	prologue: impl Fn(&mut TokenStream, bool),
 ) {
 	let Expr::Capture(cap) = &expr else { unreachable!() };
 	let (capture, container) = match &cap.info {
@@ -550,12 +553,12 @@ fn gen_matcher(
 		}> ::gramex::Matcher<#matched_type> for #matcher_ident<
 			#for arg in args #{ #arg }
 		> {
-			type Capture<'a> = #capture;
-			fn do_match<'a, M: ::gramex::Mode>(
-				&self, __value: &'a #{&matched_type}, __off: &mut usize,
-			) -> ::gramex::MatchResult<Self::Capture<'a>, M> {
+			type Capture<'src> = #capture;
+			fn do_match<'src, M: ::gramex::Mode>(
+				&self, __value: &'src #{&matched_type}, __off: &mut usize,
+			) -> ::gramex::MatchResult<Self::Capture<'src>, M> {
 				use ::gramex::{ Matcher as _, MatchAble as _, Mode as _ };
-				#do { prologue(stream) }
+				#do { prologue(stream, true) }
 				let mut #{ident!("__cap__{}", cap.ident)} = None;
 				#{ctx.label}: {
 					#do { gen_expr(stream, expr, ctx) }
@@ -563,43 +566,51 @@ fn gen_matcher(
 				}?;
 				M::ok_with(|| #do { gen_capture_unwrwap(stream, &cap.ident, container) })
 			}
+			fn expected(&self) -> ::gramex::Expected {
+				use ::gramex::{ Matcher as _ };
+				#do { prologue(stream, false) }
+				#do { gen_expected(stream, &cap.expr) }
+			}
 		}
 	);
 }
 
 pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenStream) {
-	let actual_args = term.args.iter().filter(|arg| *arg != "_").collect::<Vec<_>>();
+	let args = term.args.iter().filter(|arg| *arg != "_").collect::<Vec<_>>();
+	let args_t = args.iter().map(|i| pascal_case(i)).collect::<Vec<_>>();
 	let matcher_ident = ident!("{}__Matcher", span = term.name.span(), term.name);
 	let Expr::Capture(cap) = &term.expr else { unreachable!() };
 
 	chunk!(stream,
-		#if term.args.is_empty() #{
+		#if args.is_empty() #{
 			pub use #matcher_ident as #{&term.name};
 		} #else #{
-			pub fn #{&term.name}( #for arg in &actual_args #{
-				#arg: impl ::gramex::Matcher<#matched_type>,
-			})  -> impl ::gramex::Matcher<#matched_type>
+			pub fn #{&term.name}<#for arg in &args_t #{
+				#arg: ::gramex::Matcher<#matched_type>,
+			}>(#for arg in &args #{ #arg: #{pascal_case(arg)} })
+				-> #matcher_ident<#for arg in &args_t #{ #arg, }>
 			{
-				#matcher_ident(#for arg in &actual_args #{ #arg, })
+				#matcher_ident(#for arg in &args #{ #arg, })
 			}
 		}
 
 		# #[doc(hidden)]
 		# #[allow(nonstandard_style)]
 		pub struct #matcher_ident
-		#if actual_args.len() > 0 #{
-			<#for arg in &actual_args #{
+		#if args.len() > 0 #{
+			<#for arg in &args #{
 				#arg: ::gramex::Matcher<#matched_type>,
 			}>
-			(#for arg in &actual_args #{ #arg })
+			(#for arg in &args #{ #arg })
 		};
-		#do { gen_matcher(stream, &matcher_ident, &term.expr, matched_type, &actual_args,
-			|mut stream| chunk!(stream,
-				#if actual_args.len() > 0 #{
+		#do { gen_matcher(stream, &matcher_ident, &term.expr, matched_type, &args,
+			|mut stream, in_matcher| chunk!(stream,
+				#if args.len() > 0 #{
 					let Self(
-						#for arg in &actual_args #{ #arg, }
+						#for arg in &args #{ #arg, }
 					) = self;
-				} #else if cap.map.is_some() #{
+				}
+				#if cap.map.is_some() && in_matcher #{
 					fn #{&term.name} () {}
 				}
 			)
@@ -612,7 +623,7 @@ fn gen_call_matcher(stream: &mut TokenStream, matcher: &Matcher) {
 	chunk!(stream, {
 		struct Matcher;
 		#do {
-			gen_matcher(stream, &ident!("Matcher"), &matcher.expr, matched_type, &[], |_| ());
+			gen_matcher(stream, &ident!("Matcher"), &matcher.expr, matched_type, &[], |_, _| ());
 		}
 		Matcher
 	})

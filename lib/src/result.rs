@@ -1,6 +1,6 @@
-use crate::{MatchAble, Mode};
+use crate::Mode;
 use alloc_crate::{borrow::Cow, vec::Vec};
-use core::fmt::{Debug, Display};
+use core::fmt::{Debug, Display, Write};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Expected {
@@ -10,19 +10,29 @@ pub enum Expected {
 	OneOf(Vec<Cow<'static, str>>),
 	Between(Cow<'static, str>, Cow<'static, str>),
 }
+impl Expected {
+	pub fn value(&self) -> Cow<'static, str> {
+		match self {
+			Self::None => "".into(),
+			Self::A(Cow::Borrowed(thing)) => Cow::Borrowed(thing),
+			Self::A(Cow::Owned(thing)) => thing.clone().into(),
+			Self::OneOf(things) => {
+				let mut s = String::from("one of ");
+				for (i, thing) in things.iter().enumerate() {
+					write!(s, "{}{thing}", if i > 0 { ", " } else { "" }).unwrap();
+				}
+				s.into()
+			}
+			Self::Between(a, b) => format!("between {a} and {b}").into(),
+		}
+	}
+}
 impl Display for Expected {
 	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
-		match self {
-			Self::None => write!(f, ""),
-			Self::A(thing) => write!(f, "expected {thing}"),
-			Self::OneOf(things) => {
-				write!(f, "expected one of ")?;
-				for (i, thing) in things.iter().enumerate() {
-					write!(f, "{}{thing}", if i > 0 { ", " } else { "" })?
-				}
-				Ok(())
-			}
-			Self::Between(a, b) => write!(f, "expected between {a} and {b}"),
+		if !matches!(self, Self::None) {
+			write!(f, "expected {}", self.value())
+		} else {
+			Ok(())
 		}
 	}
 }

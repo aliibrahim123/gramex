@@ -80,10 +80,7 @@ impl Cursor<'_> {
 		self.skip();
 		true
 	}
-	pub fn test_punct_alone(&mut self, char: char) -> bool {
-		let Some(TokenTree::Punct(punct)) = self.peek() else { return false };
-		punct.as_char() == char && punct.spacing() == Spacing::Alone
-	}
+
 	pub fn test_punct(&self, char: char) -> bool {
 		let Some(TokenTree::Punct(punct)) = self.peek() else { return false };
 		punct.as_char() == char
