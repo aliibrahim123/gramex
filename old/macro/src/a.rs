@@ -1,8 +1,8 @@
 use core::{marker::PhantomData, ops::Range};
 
 use crate::{
-	Expected, MatchResult,
 	result::{IntoResult, MatchError},
+	Expected, MatchResult,
 };
 
 pub trait MatchAble {

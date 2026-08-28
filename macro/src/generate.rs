@@ -1,5 +1,5 @@
 use chunked_quote::{chunk, quote};
-use proc_macro2::{Ident, Punct, Spacing::Joint, Span, TokenStream};
+use proc_macro2::{Ident, Literal, Punct, Spacing::Joint, Span, TokenStream};
 use quote::ToTokens;
 
 use crate::{
@@ -137,8 +137,8 @@ fn error_any(stream: &mut TokenStream) {
 fn gen_atom(mut stream: &mut TokenStream, atom: &Atom, ctx: Context) {
 	match atom {
 		Atom::Any => chunk!(stream,
-			if !__value.__skip_n(&__value, __off, 1) {
-				break #{ctx.label} #{ctx.mode.no_cap()}::err_with(|| #do { error_any(stream) });
+			if !__value.__skip_n(__off, 1) {
+				break #{ctx.label} #{ctx.mode}::err_with(|| #do { error_any(stream) });
 			};
 		),
 		Atom::Matcher(matcher) => chunk!(stream,
@@ -253,7 +253,7 @@ fn gen_unit(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 	let Expr::Unit { not, near, rep, atom } = expr else { unreachable!() };
 	if *not == false && *near == false && matches!(atom, Atom::Any) && rep.is_exact() {
 		chunk!(stream,
-			if !__value.__skip_n(__off, #{rep.0}) {
+			if !__value.__skip_n(__off, #{Literal::u32_unsuffixed(rep.0)}) {
 				break #{ctx.label} #{ctx.mode}::err_with(|| #do { error_any(stream) });
 			};
 		);
@@ -369,7 +369,9 @@ fn gen_capture_set(mut stream: &mut TokenStream, ident: &Ident, container: CapCo
 	chunk!(stream,
 		#{ident!("__cap__{ident}")} #match container {
 			CapContainer::None | CapContainer::Option => #{ = Some(__cap) },
-			CapContainer::Vec | CapContainer::OptionVec => #{ .get_or_insert_default().push(__cap) },
+			CapContainer::Vec | CapContainer::OptionVec => #{
+				.get_or_insert_with(|| ::gramex::__private::Vec::new()).push(__cap)
+			},
 		};
 	)
 }
@@ -377,15 +379,9 @@ fn gen_capture_set(mut stream: &mut TokenStream, ident: &Ident, container: CapCo
 fn gen_capture_normal(
 	stream: &mut TokenStream, cap: &Capture, info: &CapInfo, ctx: Context,
 ) {
-	let (is_atomic, need_from) = match &info.kind {
-		CapKind::Atomic { need_from } => (true, need_from),
-		CapKind::Normal { need_from } => (false, need_from),
-		_ => unreachable!(),
-	};
-
 	chunk!(stream, {
 		let __start = *__off;
-		#if is_atomic #{
+		#if matches!(info.kind, CapKind::Atomic { .. }) #{
 			let __cap = #do { gen_atomic_capture(stream, &cap.expr, ctx) };
 			if let Err(err) = __cap {
 				break #{ctx.label} #{ctx.mode}::err_with(||
@@ -396,11 +392,19 @@ fn gen_capture_normal(
 			#do { gen_expr(stream, &cap.expr, ctx) }
 		}
 		if #{ctx.mode}::DO_CAPTURE {
-			let __cap = #match is_atomic {
-				true => #{ #{ctx.mode}::unwrap_success(::gramex::__private::unwrap_result(__cap)) },
-				false => #{ __value.__slice(__start..*__off).unwrap() },
+			let __cap = #match &info.kind {
+				CapKind::Atomic { .. } => #{
+					#{ctx.mode}::unwrap_success(::gramex::__private::unwrap_result(__cap))
+				},
+				CapKind::Normal { .. } => #{ __value.__slice(__start..*__off).unwrap() },
+				CapKind::UnitStruct => #{
+					#{&info.resolved_type}(__value.__slice(__start..*__off).unwrap())
+				},
+				_ => unreachable!(),
 			};
-			#if *need_from #{
+			#if matches!(&info.kind,
+				CapKind::Atomic { need_from: true } | CapKind::Normal { need_from: true }
+			) #{
 				let __cap = ::core::convert::Into::<#{&info.resolved_type}>::into(__cap);
 			}
 			#if let Some(map) = &cap.map #{
@@ -412,12 +416,13 @@ fn gen_capture_normal(
 	});
 }
 
-fn gen_capture_struct(
+fn gen_capture_fielded(
 	stream: &mut TokenStream, cap: &Capture, info: &CapInfo, ctx: Context,
 ) {
 	let fields = match &info.kind {
 		CapKind::Struct { fields, .. } => fields,
 		CapKind::Tuple(fields) => fields,
+		CapKind::ReduceMap(fields) => fields,
 		_ => unreachable!(),
 	};
 
@@ -429,24 +434,20 @@ fn gen_capture_struct(
 		#do { gen_expr(stream, &cap.expr, ctx) }
 		if #{ctx.mode}::DO_CAPTURE {
 			#match &info.kind {
-				CapKind::Tuple(fields) if let Some(map) = &cap.map => #{
+				CapKind::ReduceMap(_) => #{
 					#for field in fields #{
 						let #{&field.name} = #do {
 							gen_capture_unwrwap(stream, &field.name, field.container)
 						};
 					}
-					let __cap = #map;
+					let __cap = #{&cap.map};
 				},
-				CapKind::Tuple(fields) => #{
+				CapKind::Tuple(_) => #{
 					let __cap = (#for field in fields #{
 						#do { gen_capture_unwrwap(stream, &field.name, field.container) },
 					});
 				}
-				CapKind::Struct { fields, .. } if fields.is_empty() => #{
-					let __cap = __value.__slice(__start..*__off).unwrap();
-					let __cap = #{&info.resolved_type}(__cap);
-				}
-				CapKind::Struct { fields, is_generated } => #{
+				CapKind::Struct { is_generated, .. } => #{
 					let __cap = #{&info.resolved_type} {
 						#for field in fields #{
 							#{&field.name}: #do {
@@ -494,18 +495,18 @@ fn gen_capture_enum(
 	gen_or(stream, exprs, ctx, before, after);
 }
 
-fn gen_capture(mut stream: &mut TokenStream, cap: &Capture, ctx: Context) {
+fn gen_capture(stream: &mut TokenStream, cap: &Capture, ctx: Context) {
 	let Some(info) = &cap.info else { return gen_expr(stream, &cap.expr, ctx) };
 
-	match &info.kind {
-		CapKind::Atomic { .. } | CapKind::Normal { .. } => {
-			gen_capture_normal(&mut stream, cap, info, ctx)
+	gen_rep(stream, cap.rep, ctx, |stream, ctx| match &info.kind {
+		CapKind::Atomic { .. } | CapKind::Normal { .. } | CapKind::UnitStruct => {
+			gen_capture_normal(stream, cap, info, ctx)
 		}
-		CapKind::Struct { .. } | CapKind::Tuple(_) => {
-			gen_capture_struct(&mut stream, cap, info, ctx)
+		CapKind::Struct { .. } | CapKind::Tuple(_) | CapKind::ReduceMap(_) => {
+			gen_capture_fielded(stream, cap, info, ctx)
 		}
-		CapKind::Enum(vars) => gen_capture_enum(&mut stream, cap, vars, info, ctx),
-	}
+		CapKind::Enum(vars) => gen_capture_enum(stream, cap, vars, info, ctx),
+	});
 }
 
 fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
@@ -533,7 +534,7 @@ fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 
 fn gen_matcher(
 	mut stream: &mut TokenStream, matcher_ident: &Ident, expr: &Expr,
-	matched_type: &TokenStream, prologue: impl Fn(&mut TokenStream),
+	matched_type: &TokenStream, args: &[&Ident], prologue: impl Fn(&mut TokenStream),
 ) {
 	let Expr::Capture(cap) = &expr else { unreachable!() };
 	let (capture, container) = match &cap.info {
@@ -544,7 +545,11 @@ fn gen_matcher(
 	let ctx = Context { label: BlockLable(0), mode: Mode { capture: true, error: true } };
 	chunk!(stream,
 		# #[allow(nonstandard_style, unused_imports)]
-		impl ::gramex::Matcher<#matched_type> for #matcher_ident {
+		impl<#for arg in args #{
+			#arg: ::gramex::Matcher<#matched_type>,
+		}> ::gramex::Matcher<#matched_type> for #matcher_ident<
+			#for arg in args #{ #arg }
+		> {
 			type Capture<'a> = #capture;
 			fn do_match<'a, M: ::gramex::Mode>(
 				&self, __value: &'a #{&matched_type}, __off: &mut usize,
@@ -565,19 +570,17 @@ fn gen_matcher(
 pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenStream) {
 	let actual_args = term.args.iter().filter(|arg| *arg != "_").collect::<Vec<_>>();
 	let matcher_ident = ident!("{}__Matcher", span = term.name.span(), term.name);
+	let Expr::Capture(cap) = &term.expr else { unreachable!() };
 
 	chunk!(stream,
 		#if term.args.is_empty() #{
 			pub use #matcher_ident as #{&term.name};
 		} #else #{
-			pub fn #{&term.name}(
-				#for arg in &term.args #{
-					#arg: impl ::gramex::Matcher<#matched_type>
-				}
-			) -> impl ::gramex::Matcher<#matched_type> {
-				#matcher_ident(
-					#for arg in &actual_args #{ #arg, }
-				)
+			pub fn #{&term.name}( #for arg in &actual_args #{
+				#arg: impl ::gramex::Matcher<#matched_type>,
+			})  -> impl ::gramex::Matcher<#matched_type>
+			{
+				#matcher_ident(#for arg in &actual_args #{ #arg, })
 			}
 		}
 
@@ -585,14 +588,19 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 		# #[allow(nonstandard_style)]
 		pub struct #matcher_ident
 		#if actual_args.len() > 0 #{
+			<#for arg in &actual_args #{
+				#arg: ::gramex::Matcher<#matched_type>,
+			}>
 			(#for arg in &actual_args #{ #arg })
 		};
-		#do { gen_matcher(stream, &matcher_ident, &term.expr, matched_type,
-			|stream| chunk!(stream,
+		#do { gen_matcher(stream, &matcher_ident, &term.expr, matched_type, &actual_args,
+			|mut stream| chunk!(stream,
 				#if actual_args.len() > 0 #{
 					let Self(
 						#for arg in &actual_args #{ #arg, }
 					) = self;
+				} #else if cap.map.is_some() #{
+					fn #{&term.name} () {}
 				}
 			)
 		) }
@@ -604,7 +612,7 @@ fn gen_call_matcher(stream: &mut TokenStream, matcher: &Matcher) {
 	chunk!(stream, {
 		struct Matcher;
 		#do {
-			gen_matcher(stream, &ident!("Matcher"), &matcher.expr, matched_type, |_| ());
+			gen_matcher(stream, &ident!("Matcher"), &matcher.expr, matched_type, &[], |_| ());
 		}
 		Matcher
 	})

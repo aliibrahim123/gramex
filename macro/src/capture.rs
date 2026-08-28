@@ -14,6 +14,8 @@ pub enum CapKind {
 	Atomic { need_from: bool },
 	Tuple(Vec<CapChild>),
 	Struct { fields: Vec<CapChild>, is_generated: bool },
+	ReduceMap(Vec<CapChild>),
+	UnitStruct,
 	Enum(Vec<Option<CapChild>>),
 }
 #[derive(Debug, Clone, Copy)]
@@ -100,7 +102,11 @@ fn resolve_captures(
 				resolve_captures(expr, is_optional, parent, ctx);
 			};
 		}
-		Expr::Unit { atom: Atom::Call { .. }, .. } => forbid_captures(expr, ctx.errors),
+		Expr::Unit { atom: Atom::Call { args, .. }, .. } => {
+			for arg in args {
+				analyze_matcher(arg, ctx);
+			}
+		}
 		Expr::Capture(cap) => {
 			_ = resolve_capture(&mut *cap, is_optional, parent, ctx);
 		}
@@ -143,7 +149,13 @@ fn has_capture(expr: &Expr) -> bool {
 		Expr::Imply { cond, expr } => has_capture(cond) || has_capture(expr),
 		Expr::Unit { atom: Atom::Group(expr), .. } => has_capture(expr),
 		Expr::Unit { atom: Atom::Call { args, .. }, .. } => {
-			args.iter().any(|arg| has_capture(&arg.expr))
+			for arg in args {
+				let Expr::Capture(cap) = &arg.expr else { continue };
+				if has_capture(&cap.expr) {
+					return true;
+				}
+			}
+			false
 		}
 		Expr::Capture(_) => true,
 		_ => false,
@@ -171,10 +183,6 @@ fn resolve_capture_type(
 	let mut gen_item = |item_ident: &mut Option<_>, create: fn(_) -> _| -> Result<_, _> {
 		let item_ident = item_ident.take().unwrap_or_else(|| pascal_case(&cap.ident));
 
-		if cap.map.is_some() {
-			err!(ctx, "generated type captures can not have a map", cap.ident.span());
-			return Err(());
-		}
 		let Some(cap_mod) = ctx.capture_mod.as_deref_mut() else {
 			let msg = "can not use generated capture type outside grammar declerations";
 			err!(ctx, msg, cap.ident.span());
@@ -221,8 +229,14 @@ fn resolve_struct_capture(
 	}
 
 	let is_inherited = matches!(cap.ty, CapType::Inherited);
-	if is_inherited || cap.map.is_some() {
-		if is_inherited && parent.is_generated {
+	if cap.map.is_some() {
+		if is_generated {
+			err!(ctx, "non unit structs captures can not have a map", cap.ident.span());
+			return Err(());
+		}
+		Ok(CapKind::ReduceMap(_self.children))
+	} else if is_inherited {
+		if parent.is_generated {
 			*resolved_type = quote! { ( #for child in &_self.children #{
 				#do { child.container.wrap_type(__stream, &child.resolved_type) },
 			})}
@@ -392,15 +406,41 @@ pub fn pascal_case(ident: &Ident) -> Ident {
 	Ident::new(&res, ident.span())
 }
 
+fn propagate_matched_type(expr: &mut Expr, matched_type: Option<&TokenStream>) {
+	match expr {
+		Expr::And(expr) | Expr::Seq(expr) | Expr::Or(expr) => {
+			for expr in expr {
+				propagate_matched_type(expr, matched_type);
+			}
+		}
+		Expr::Imply { cond, expr } => {
+			propagate_matched_type(cond, matched_type);
+			propagate_matched_type(expr, matched_type);
+		}
+		Expr::Capture(cap) => propagate_matched_type(&mut cap.expr, matched_type),
+		Expr::Unit { atom: Atom::Group(expr), .. } => {
+			propagate_matched_type(expr, matched_type)
+		}
+		Expr::Unit { atom: Atom::Call { args, .. }, .. } => {
+			for arg in args {
+				if arg.matched_type.is_none() {
+					arg.matched_type = matched_type.cloned();
+				}
+				propagate_matched_type(&mut arg.expr, arg.matched_type.as_ref());
+			}
+		}
+		_ => {}
+	}
+}
+
 pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) {
-	let Some(matched_type) = ctx.matched_type else {
+	if ctx.matched_type.is_none() {
 		let msg = "expected specified matched type for matchers arguments";
 		err!(ctx, msg, Span::call_site());
 		return;
 	};
-	let matched_type = matcher.matched_type.get_or_insert_with(|| matched_type.clone());
 	let mut ctx = Context {
-		matched_type: Some(matched_type),
+		matched_type: matcher.matched_type.as_ref(),
 		capture_mod: ctx.capture_mod.as_deref_mut(),
 		errors: ctx.errors,
 	};
@@ -418,5 +458,6 @@ pub fn analyze_term(term: &mut Term, ctx: &mut Context) {
 		}
 	}
 
+	propagate_matched_type(expr, ctx.matched_type);
 	resolve_captures(expr, false, &mut CapParent::new(true), ctx);
 }
