@@ -42,8 +42,10 @@ pub fn gramex(input: TokenStream) -> TokenStream {
 
 	quote! {
 		#for e in errors #{#e}
-		# #[allow(nonstandard_style)]
-		pub mod captures {use super::*; #{cap_mod.stream}}
+		# #[allow(nonstandard_style, unused_imports)]
+		pub mod captures {
+			use super::*; use ::gramex::__private as __; #{cap_mod.stream}
+		}
 		#stream
 	}
 	.into()

@@ -40,15 +40,13 @@ pub trait Mode {
 	const DO_CAPTURE: bool;
 	const DO_ERROR: bool;
 
-	type WithCapture: Mode;
+	type WithCapture: Mode<Error = Self::Error>;
 	type WithError: Mode;
-	type WithoutCapture: Mode;
-	type WithoutError: Mode;
+	type WithoutCapture: Mode<Error = Self::Error>;
+	type WithoutError: Mode<Error = ()>;
 
-	fn ok<T>(cap: T) -> MatchResult<T, Self>;
-	fn err<T>(err: MatchError) -> MatchResult<T, Self>;
-	fn ok_with<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
-	fn err_with<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
+	fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
+	fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
 
 	fn unwrap_success<T>(val: Self::Success<T>) -> T {
 		let _ = val;
@@ -86,20 +84,16 @@ macro_rules! decl_mod {
 				type WithoutCapture = $minus_cap;
 				type WithoutError = $minus_err;
 
-				$($cap_true fn ok<T>(cap: T) -> MatchResult<T, Self> { Ok(cap) })?
-				$($cap_false fn ok<T>(_cap: T) -> MatchResult<T, Self> { Ok(()) })?
-				$($err_true fn err<T>(err: MatchError) -> MatchResult<T, Self> { Err(err) })?
-				$($err_false fn err<T>(_err: MatchError) -> MatchResult<T, Self> { Err(()) })?
-				$($cap_true fn ok_with<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
+				$($cap_true fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
 					Ok(cap())
 				})?
-				$($cap_false fn ok_with<T>(_cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
+				$($cap_false fn ok<T>(_cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
 					Ok(())
 				})?
-				$($err_true fn err_with<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
+				$($err_true fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
 					Err(err())
 				})?
-				$($err_false fn err_with<T>(_err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
+				$($err_false fn err<T>(_err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
 					Err(())
 				})?
 

@@ -28,8 +28,8 @@ impl CapContainer {
 	pub fn wrap_type(self, mut result: &mut TokenStream, item: impl ToTokens) {
 		match self {
 			Self::None => item.to_tokens(result),
-			Self::Option => chunk!(result, ::core::option::Option<#item> ),
-			Self::Vec => chunk!(result, ::gramex::__private::Vec<#item> ),
+			Self::Option => chunk!(result, __::Option<#item> ),
+			Self::Vec => chunk!(result, __::Vec<#item> ),
 		}
 	}
 }
@@ -216,7 +216,7 @@ fn resolve_struct_capture(
 				#for CapChild { name, resolved_type, container } in &_self.children #{
 					pub #name: #do { container.wrap_type(stream, resolved_type) },
 				}
-				# #[doc(hidden)] pub __life_marker: ::std::marker::PhantomData<&'src ()>,
+				# #[doc(hidden)] pub __life_marker: __::PhantomData<&'src ()>,
 			}
 		)
 	} else if let Create::Enum(_) = create {
@@ -302,7 +302,7 @@ fn resolve_enum_capture(
 				#if has_none #{ None, }
 				#do { stream.extend(variants_def.unwrap()) }
 				# #[doc(hidden)] __LifeMarker (
-					::std::marker::PhantomData<&'src ()>, ::std::convert::Infallible
+					__::PhantomData<&'src ()>, __::Infallible
 				),
 			}
 		)

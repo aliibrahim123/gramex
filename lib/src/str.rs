@@ -42,12 +42,12 @@ macro_rules! define_matcher {
 				let (res, len) = $logic;
 				if res {
 					*off += len;
-					M::ok_with(|| &$rem[..len])
+					M::ok(|| &$rem[..len])
 				} else if len > $rem.len() {
 					*off = matched.len();
-					M::err_with(|| MatchError::incomplete(self.expected(), *off))
+					M::err(|| MatchError::incomplete(self.expected(), *off))
 				} else {
-					M::err_with(|| MatchError::mismatch(self.expected(), *off))
+					M::err(|| MatchError::mismatch(self.expected(), *off))
 				}
 			}
 			fn expected(&self) -> Expected {
