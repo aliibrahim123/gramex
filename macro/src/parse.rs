@@ -385,6 +385,10 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 			cur.punct(':');
 			ty
 		}
+		false if !inside_call => {
+			cur.expected("`for`");
+			return Matcher { matched_type: None, expr: Expr::Error };
+		}
 		false => None,
 	};
 
@@ -399,6 +403,9 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 		}),
 		false => None,
 	};
+	if !inside_call && !cur.is_end() {
+		err!(cur, "expected end of input")
+	}
 
 	let ident = ident!("root");
 	let cap = Capture { ident, map, expr, ..Default::default() };
@@ -485,4 +492,28 @@ pub fn parse_grammer_decl(cur: &mut Cursor) -> GrammarDecl {
 		try_parse_term(cur).map(|t| terms.push(t));
 	}
 	GrammarDecl { matched_type, terms }
+}
+
+/// grammer: `('for' -> matched_type:type ',') value:expr ',' expr`
+#[derive(Debug, Clone)]
+pub struct MatchExpr {
+	pub matched_type: Option<TokenStream>,
+	pub value: TokenStream,
+	pub expr: Expr,
+}
+
+pub fn parse_match_expr(cur: &mut Cursor) -> MatchExpr {
+	let matched_type = match cur.try_kw("for") {
+		true => cur.eat_until("a type", |cur| cur.test_punct(',')),
+		false => None,
+	};
+	let value = cur
+		.eat_until("an expression", |cur| cur.test_punct('<'))
+		.unwrap_or_else(|| quote!(()));
+	cur.punct(',');
+	let expr = parse_expr(cur);
+	if !cur.is_end() {
+		cur.expected("end of input");
+	}
+	MatchExpr { matched_type, value, expr }
 }

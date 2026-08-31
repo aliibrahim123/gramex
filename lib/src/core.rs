@@ -48,10 +48,15 @@ pub trait Mode {
 	fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
 	fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
 
+	fn wrap_success<T>(val: T) -> Self::Success<T>;
+	fn wrap_error(err: MatchError) -> Self::Error;
+
+	#[inline]
 	fn unwrap_success<T>(val: Self::Success<T>) -> T {
 		let _ = val;
 		panic!("unwrap_success called on no-capture mode")
 	}
+	#[inline]
 	fn unwrap_error(val: Self::Error) -> MatchError {
 		let _ = val;
 		panic!("unwrap_error called on no-error mode")
@@ -84,12 +89,14 @@ macro_rules! decl_mod {
 				type WithoutCapture = $minus_cap;
 				type WithoutError = $minus_err;
 
+				#[inline]
 				$($cap_true fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
 					Ok(cap())
 				})?
 				$($cap_false fn ok<T>(_cap: impl FnOnce() -> T) -> MatchResult<T, Self> {
 					Ok(())
 				})?
+				#[inline]
 				$($err_true fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
 					Err(err())
 				})?
@@ -97,8 +104,16 @@ macro_rules! decl_mod {
 					Err(())
 				})?
 
-				$($cap_true fn unwrap_success<T>(val: Self::Success<T>) -> T { val })?
-				$($err_true fn unwrap_error(val: Self::Error) -> MatchError { val })?
+				#[inline]
+				$($cap_true fn wrap_success<T>(val: T) -> Self::Success<T> { val })?
+				$($cap_false fn wrap_success<T>(_val: T) -> Self::Success<T> { () })?
+				#[inline]
+				$($err_true fn wrap_error(err: MatchError) -> Self::Error { err })?
+				$($err_false fn wrap_error(_err: MatchError) -> Self::Error { () })?
+
+
+				$(#[inline] $cap_true fn unwrap_success<T>(val: Self::Success<T>) -> T { val })?
+				$(#[inline] $err_true fn unwrap_error(val: Self::Error) -> MatchError { val })?
 			}
 		};
 	}
@@ -131,17 +146,21 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<Self::Capture<'src>, M>;
 
+	#[inline]
 	fn test(&self, matched: &T, off: &mut usize) -> bool {
 		self.do_match::<Test>(matched, off).is_ok()
 	}
+	#[inline]
 	fn check(&self, matched: &T, off: &mut usize) -> Result<(), MatchError> {
 		self.do_match::<Check>(matched, off)
 	}
+	#[inline]
 	fn capture<'src>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> Option<Self::Capture<'src>> {
 		self.do_match::<Capture>(matched, off).ok()
 	}
+	#[inline]
 	fn parse<'src>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> Result<Self::Capture<'src>, MatchError> {
@@ -152,6 +171,7 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		Expected::None
 	}
 
+	#[inline]
 	#[doc(hidden)]
 	fn __do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
@@ -180,6 +200,7 @@ where
 {
 	type Capture = <R as IntoResult>::Output;
 	type Res = R;
+
 	fn call(&self, matched: &'src T, off: &mut usize) -> R {
 		self(matched, off)
 	}

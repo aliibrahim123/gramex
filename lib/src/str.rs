@@ -9,12 +9,15 @@ use crate::{
 impl MatchAble for str {
 	type Slice<'a> = &'a str;
 
+	#[inline]
 	fn len(&self) -> usize {
 		self.len()
 	}
+	#[inline]
 	fn slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>> {
 		self.get(range)
 	}
+	#[inline]
 	fn skip_n(&self, off: &mut usize, n: usize) -> bool {
 		if n == 0 {
 			return true;
@@ -34,6 +37,7 @@ macro_rules! define_matcher {
 	($ty:ty, ($matcher:ident, $rem:ident) => $logic:expr, $expected:expr) => {
 		impl Matcher<str> for $ty {
 			type Capture<'a> = &'a str;
+			#[inline]
 			fn do_match<'a, M: Mode>(
 				&self, matched: &'a str, off: &mut usize,
 			) -> MatchResult<Self::Capture<'a>, M> {
@@ -72,6 +76,7 @@ macro_rules! impl_ref {
 	[$($(#for <$life:lifetime>)? $T:ty),+] => {
 		$(impl$(<$life>)? Matcher<str> for $T {
 			type Capture<'a> = &'a str;
+			#[inline]
 			fn do_match<'a, M: Mode>(
 				&self, matched: &'a str, off: &mut usize,
 			) -> MatchResult<Self::Capture<'a>, M> {

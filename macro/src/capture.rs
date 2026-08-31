@@ -434,6 +434,11 @@ fn propagate_matched_type(expr: &mut Expr, matched_type: Option<&TokenStream>) {
 	}
 }
 
+pub fn analyze_expr(expr: &mut Expr, concrete_types: bool, ctx: &mut Context) {
+	propagate_matched_type(expr, ctx.matched_type);
+	resolve_captures(expr, false, &mut CapParent::new(concrete_types), ctx);
+}
+
 pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) {
 	if ctx.matched_type.is_none() {
 		let msg = "expected specified matched type for matchers arguments";
@@ -446,7 +451,7 @@ pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) {
 		errors: ctx.errors,
 	};
 
-	resolve_captures(&mut matcher.expr, false, &mut CapParent::new(false), &mut ctx);
+	analyze_expr(&mut matcher.expr, true, &mut ctx);
 }
 
 pub fn analyze_term(term: &mut Term, ctx: &mut Context) {
@@ -459,6 +464,5 @@ pub fn analyze_term(term: &mut Term, ctx: &mut Context) {
 		}
 	}
 
-	propagate_matched_type(expr, ctx.matched_type);
-	resolve_captures(expr, false, &mut CapParent::new(true), ctx);
+	analyze_expr(expr, true, ctx);
 }
