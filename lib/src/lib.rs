@@ -30,10 +30,29 @@ pub mod __private {
 		MatchError::incomplete(EXPECTED_ANY, off)
 	}
 	pub fn expected_not(expected: Expected) -> Expected {
-		Expected::A(format!("not {}", expected.value()).into())
+		match expected {
+			Expected::None => Expected::None,
+			_ => Expected::A(format!("not {}", expected.value()).into()),
+		}
 	}
 	pub fn error_not(expected: Expected, is_mismatch: bool, off: usize) -> MatchError {
 		let expected = expected_not(expected);
+		match is_mismatch {
+			true => MatchError::mismatch(expected, off),
+			false => MatchError::incomplete(expected, off),
+		}
+	}
+	pub fn expected_or(cases: &[Expected]) -> Expected {
+		let mut resolved = Vec::with_capacity(cases.len());
+		for case in cases {
+			if !matches!(case, Expected::None) {
+				resolved.push(case.value().into());
+			}
+		}
+		if resolved.len() > 0 { Expected::OneOf(resolved) } else { Expected::None }
+	}
+	pub fn error_or(cases: &[Expected], is_mismatch: bool, off: usize) -> MatchError {
+		let expected = expected_or(cases);
 		match is_mismatch {
 			true => MatchError::mismatch(expected, off),
 			false => MatchError::incomplete(expected, off),

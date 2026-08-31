@@ -10,10 +10,10 @@ use quote::ToTokens;
 
 macro_rules! ident {
 	($format:literal, span = $span:expr, $($t:tt)*) => {
-		Ident::new(&format!($format, $($t)*), $span)
+		proc_macro2::Ident::new(&format!($format, $($t)*), $span)
 	};
 	($format:literal $($t:tt)*) => {
-		Ident::new(&format!($format $($t)*), Span::call_site())
+		proc_macro2::Ident::new(&format!($format $($t)*), Span::call_site())
 	};
 }
 pub(crate) use ident;

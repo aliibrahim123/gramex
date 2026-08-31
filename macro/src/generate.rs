@@ -1,8 +1,8 @@
 use std::cell::Cell;
 
-use chunked_quote::{chunk, quote};
+use chunked_quote::chunk;
 use proc_macro2::{Ident, Literal, Punct, Spacing::Joint, Span, TokenStream};
-use quote::ToTokens;
+use quote::{ToTokens, quote};
 
 use crate::{
 	capture::{CapChild, CapContainer, CapInfo, CapKind, pascal_case},
@@ -29,10 +29,14 @@ impl BlockLable<'_> {
 
 #[derive(Debug, Clone, Copy)]
 struct Mode {
+	is_concrete: bool,
 	capture: bool,
 	error: bool,
 }
 impl Mode {
+	fn param() -> Mode {
+		Mode { is_concrete: false, capture: true, error: true }
+	}
 	fn no_cap(&self) -> Mode {
 		Mode { capture: false, ..*self }
 	}
@@ -42,11 +46,14 @@ impl Mode {
 }
 impl ToTokens for Mode {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
-		match (self.capture, self.error) {
-			(true, true) => chunk!(tokens, __M),
-			(true, false) => chunk!(tokens, __M::WithoutError),
-			(false, true) => chunk!(tokens, __M::WithoutCapture),
-			(false, false) => chunk!(tokens, __Test),
+		match (self.is_concrete, self.capture, self.error) {
+			(false, true, true) => chunk!(tokens, __M),
+			(false, true, false) => chunk!(tokens, __M::WithoutError),
+			(false, false, true) => chunk!(tokens, __M::WithoutCapture),
+			(_, false, false) => chunk!(tokens, __Test),
+			(true, true, true) => chunk!(tokens, __Parse),
+			(true, true, false) => chunk!(tokens, __Capture),
+			(true, false, true) => chunk!(tokens, __Check),
 		}
 	}
 }
@@ -55,6 +62,7 @@ impl ToTokens for Mode {
 struct Context<'a> {
 	label: BlockLable<'a>,
 	mode: Mode,
+	expected_fuel: u8,
 }
 impl Context<'_> {
 	fn next_label(&self) -> Context {
@@ -72,46 +80,66 @@ fn fork<'a>(
 	let child_ctx = ctx.next_label();
 	chunk!(stream, #{child_ctx.label}: {
 		#do { item(stream, child_ctx) }
-		#{child_ctx.mode}::ok(|| ())
+		Ok(#{child_ctx.mode}::wrap_success(()))
 	})
 }
 
-fn gen_expected_atom(stream: &mut TokenStream, atom: &Atom) {
+const DEFAULT_EXPECTED_FUEL: u8 = 3;
+
+fn gen_expected_atom(stream: &mut TokenStream, atom: &Atom, fuel: u8) {
 	match atom {
 		Atom::Any => chunk!(stream, __::EXPECTED_ANY),
 		Atom::Matcher(matcher) => {
 			chunk!(stream, (&#matcher).__expected())
 		}
-		Atom::Group(expr) => gen_expected(stream, expr),
-		Atom::Call { .. } => chunk!(stream, ::gramex::Expected::None),
+		Atom::Group(expr) => gen_expected(stream, expr, fuel),
+		Atom::Call { .. } => chunk!(stream, __Expected::None),
 	}
 }
 
 #[rustfmt::skip]
-fn gen_expected_or(stream: &mut TokenStream, exprs: &[Expr]) {
-	chunk!(stream, ::gramex::Expected::OneOf(
-		__::vec![
-			#for expr in exprs #{
-				#do { gen_expected(stream, expr) }.value(),
-			}
-		]
+fn gen_expected_or(stream: &mut TokenStream, exprs: &[Expr], fuel: u8) {
+	chunk!(stream, __::expected_or(
+		&[#for expr in exprs #{
+			#do { gen_expected(stream, expr, fuel - 1) },
+		}]
 	));
 }
 
-fn gen_expected(stream: &mut TokenStream, expr: &Expr) {
+fn gen_expected(stream: &mut TokenStream, expr: &Expr, fuel: u8) {
+	if fuel == 0 {
+		chunk!(stream, __Expected::None);
+		return;
+	}
 	match expr {
-		Expr::Unit { not: true, atom, .. } => chunk!(stream,
-			__::expected_not(#do { gen_expected_atom(stream, atom) })
+		Expr::Unit { not: true, atom, .. } if fuel > 1 => chunk!(stream,
+			__::expected_not(#do { gen_expected_atom(stream, atom, fuel - 1) })
 		),
-		Expr::Unit { atom, .. } => gen_expected_atom(stream, atom),
+		Expr::Unit { not: true, .. } => chunk!(stream, __Expected::None),
+		Expr::Unit { atom, .. } => gen_expected_atom(stream, atom, fuel),
 		Expr::Range(left, right) => {
 			chunk!(stream, (#left..=#right).__expected())
 		}
-		Expr::And(exprs) | Expr::Seq(exprs) => gen_expected(stream, &exprs[0]),
-		Expr::Imply { cond, .. } => gen_expected(stream, cond),
-		Expr::Capture(cap) => gen_expected(stream, &cap.expr),
+		Expr::And(exprs) | Expr::Seq(exprs) => gen_expected(stream, &exprs[0], fuel),
+		Expr::Imply { cond, .. } => gen_expected(stream, cond, fuel),
+		Expr::Capture(cap) => gen_expected(stream, &cap.expr, fuel),
 		Expr::Error => {}
-		Expr::Or(exprs) => gen_expected_or(stream, exprs),
+		Expr::Or(exprs) => gen_expected_or(stream, exprs, fuel),
+	}
+}
+
+fn gen_error_not(
+	mut stream: &mut TokenStream, atom: &Atom, is_mismatch: impl ToTokens, ctx: Context,
+) {
+	if !ctx.mode.error {
+		chunk!(stream, break #{ctx.label} Err(()); );
+	} else {
+		chunk!(stream, break #{ctx.label} #{ctx.mode}::err(
+			|| __::error_not(
+				#do { gen_expected_atom(stream, atom, ctx.expected_fuel - 1) },
+				#is_mismatch, *__orig
+			)
+		));
 	}
 }
 
@@ -119,7 +147,10 @@ fn gen_atom_inline(mut stream: &mut TokenStream, atom: &Atom, ctx: Context) {
 	match atom {
 		Atom::Any => chunk!(stream,
 			if __value.__skip_n(__off, 1) { #{ctx.mode}::ok(|| ()) }
-			else { #{ctx.mode}::err(|| __::error_any(*__off)) }
+			else {
+				#if !ctx.mode.error #{ Err(()) }
+				#else #{ #{ctx.mode}::err(|| __::error_any(*__off)) }
+			}
 		),
 		Atom::Matcher(matcher) => chunk!(stream,
 			(&#matcher).__do_match::<#{ctx.mode.no_cap()}>(&__value, __off)
@@ -200,9 +231,7 @@ fn gen_unit_near(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 		let __off = &mut __orig.clone();
 		#if *not #{
 			if #do { fork(stream, &ctx.no_err(), gen_logic) }.is_ok() {
-				break #{ctx.label} #{ctx.mode}::err(|| __::error_not(
-					#do { gen_expected_atom(stream, atom) }, true, *__orig
-				))
+				#do { gen_error_not(stream, atom, quote! { true }, ctx) }
 			}
 		}
 		#else #{ #do { gen_logic(stream, ctx) } }
@@ -216,9 +245,7 @@ fn gen_unit_not(stream: &mut TokenStream, atom: &Atom, rep: Rep, ctx: Context) {
 			let __off = &mut __orig.clone();
 			let __res = #do { gen_atom_inline(stream, atom, ctx.no_err()) };
 			if __res.is_ok() || __res.is_err() && *__orig == __value.__len() {
-				break #{ctx.label} #{ctx.mode}::err(|| __::error_not(
-					#do { gen_expected_atom(stream, atom) }, __res.is_ok(), *__orig
-				));
+				#do { gen_error_not(stream, atom, quote! { __res.is_ok() }, ctx) }
 			}
 			__value.__skip_n(__orig, 1);
 		})
@@ -230,7 +257,8 @@ fn gen_unit(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 	if *not == false && *near == false && matches!(atom, Atom::Any) && rep.is_exact() {
 		chunk!(stream,
 			if !__value.__skip_n(__off, #{Literal::u32_unsuffixed(rep.0)}) {
-				break #{ctx.label} #{ctx.mode}::err(|| __::error_any(*__off));
+				break #{ctx.label} #if !ctx.mode.error #{ Err(()) }
+				#else #{ #{ctx.mode}::err(|| __::error_any(*__off)) }
 			};
 		);
 	} else if *near {
@@ -279,14 +307,13 @@ fn gen_or(
 			}
 		}
 		*__off = __start;
-		break #{ctx.label} #{ctx.mode}::err(|| {
-			let __expected = #do { gen_expected_or(stream, exprs) };
-			if *__off == __value.__len() {
-				::gramex::MatchError::incomplete(__expected, __start)
-			} else {
-				::gramex::MatchError::mismatch(__expected, __start)
-			}
-		});
+		break #{ctx.label} #if !ctx.mode.error #{ Err(()) } 
+		#else #{ #{ctx.mode}::err(|| __::error_or(
+			&[#for expr in exprs #{ 
+				#do { gen_expected(stream, expr, ctx.expected_fuel - 1) }, 
+			}],
+			*__off != __value.__len(), __start
+		)) }
 	};)
 }
 
@@ -364,7 +391,7 @@ fn gen_capture_normal(
 		} #else #{
 			#do { gen_expr(stream, &cap.expr, ctx) }
 		}
-		if #{ctx.mode}::DO_CAPTURE {
+		#if !ctx.mode.is_concrete #{ if #{ctx.mode}::DO_CAPTURE } {
 			let __cap = #match &info.kind {
 				CapKind::Atomic { .. } => #{
 					#{ctx.mode}::unwrap_success(__::unwrap_result(__cap))
@@ -405,7 +432,7 @@ fn gen_capture_fielded(
 			let mut #{ident!("__cap__{name}")} = None;
 		}
 		#do { gen_expr(stream, &cap.expr, ctx) }
-		if #{ctx.mode}::DO_CAPTURE {
+		#if !ctx.mode.is_concrete #{ if #{ctx.mode}::DO_CAPTURE } {
 			#match &info.kind {
 				CapKind::ReduceMap(_) => #{
 					#for field in fields #{
@@ -452,18 +479,20 @@ fn gen_capture_enum(
 		)
 	};
 	let after = |mut stream: &mut TokenStream, ind| {
-		chunk!(stream, if #{ctx.mode}::DO_CAPTURE {
-			let __cap = #{&info.resolved_type}::
-			#match &vars[ind] {
-				Some(CapChild { name, container, .. }) => #{ #
-					{pascal_case(name)} (#do {
-						gen_capture_unwrwap(stream, name, *container)
-					})
-				},
-				_ => #{None},
-			};
-			#do { gen_capture_set(stream, &cap.ident, info.container) }
-		})
+		chunk!(stream,
+			#if !ctx.mode.is_concrete #{ if #{ctx.mode}::DO_CAPTURE } {
+				let __cap = #{&info.resolved_type}::
+				#match &vars[ind] {
+					Some(CapChild { name, container, .. }) => #{ #
+						{pascal_case(name)} (#do {
+							gen_capture_unwrwap(stream, name, *container)
+						})
+					},
+					_ => #{None},
+				};
+				#do { gen_capture_set(stream, &cap.ident, info.container) }
+			}
+		)
 	};
 	gen_or(stream, exprs, ctx, before, after);
 }
@@ -517,17 +546,21 @@ fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 	}
 }
 
-fn gen_match_root(mut stream: &mut TokenStream, expr: &Expr, capture: bool) {
+pub fn gen_imports(stream: &mut TokenStream) {
+	chunk!(stream, use ::gramex::{
+		__private as __, MatchAble as __MatchAble, Mode as __Mode, Matcher as __Matcher,
+		modes::Test as __Test, Expected as __Expected, #do{}
+	}; )
+}
+
+fn gen_match_root(mut stream: &mut TokenStream, expr: &Expr, mode: Mode) {
 	let count = Cell::new(0);
 	let ctx = Context {
 		label: BlockLable(&count, 0),
-		mode: Mode { capture: true, error: true },
+		mode,
+		expected_fuel: DEFAULT_EXPECTED_FUEL,
 	};
-	chunk!(stream, use ::gramex::{
-		__private as __, MatchAble as _, Mode as _, Matcher as _,
-		modes::Test as __Test, #do{}
-	};);
-	if capture {
+	if mode.capture {
 		let Expr::Capture(cap) = &expr else { unreachable!() };
 		let container =
 			cap.info.as_ref().map_or(CapContainer::None, |info| info.container);
@@ -535,7 +568,9 @@ fn gen_match_root(mut stream: &mut TokenStream, expr: &Expr, capture: bool) {
 		chunk!(stream,
 			let mut #{ident!("__cap__{}", cap.ident)} = None;
 			let mut res = match #do { gen_expr_inline(stream, expr, ctx) } {
-				Ok(_) => __M::ok(|| #do { gen_capture_unwrwap(stream, &cap.ident, container) }),
+				Ok(_) => #mode::ok(||
+					#do { gen_capture_unwrwap(stream, &cap.ident, container) }
+				),
 				Err(err) => Err(err),
 			};
 		)
@@ -555,23 +590,20 @@ fn gen_matcher_impl(
 
 	chunk!(stream,
 		# #[allow(nonstandard_style, unused_imports, )]
-		impl<#for arg in args #{
-			#arg: ::gramex::Matcher<#matched_type>,
-		}> ::gramex::Matcher<#matched_type> for #matcher_ident<
-			#for arg in args #{ #arg }
-		> {
+		impl<#for arg in args #{ #arg: __Matcher<#matched_type>, }>
+			__Matcher<#matched_type> for #matcher_ident<#for arg in args #{ #arg }>
+		{
 			type Capture<'src> = #capture;
-			fn do_match<'src, __M: ::gramex::Mode>(
+			fn do_match<'src, __M: __Mode>(
 				&self, __value: &'src #{&matched_type}, __off: &mut usize,
 			) -> ::gramex::MatchResult<Self::Capture<'src>, __M> {
 				#do { prologue(stream, true) }
-				#do { gen_match_root(stream, expr, true) }
+				#do { gen_match_root(stream, expr, Mode::param()) }
 				return res;
 			}
-			fn expected(&self) -> ::gramex::Expected {
-				use ::gramex::{ Matcher as _, __private as __ };
+			fn expected(&self) -> __Expected {
 				#do { prologue(stream, false) }
-				#do { gen_expected(stream, &cap.expr) }
+				#do { gen_expected(stream, &cap.expr, DEFAULT_EXPECTED_FUEL) }
 			}
 		}
 	);
@@ -585,10 +617,10 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 
 	chunk!(stream,
 		#if args.is_empty() #{
-			pub use #matcher_ident as #{&term.name};
+			pub use self::#matcher_ident as #{&term.name};
 		} #else #{
 			pub fn #{&term.name}<#for arg in &args_t #{
-				#arg: ::gramex::Matcher<#matched_type>,
+				#arg: __Matcher<#matched_type>,
 			}>(#for arg in &args #{ #arg: #{pascal_case(arg)} })
 				-> #matcher_ident<#for arg in &args_t #{ #arg, }>
 			{
@@ -601,7 +633,7 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 		pub struct #matcher_ident
 		#if args.len() > 0 #{
 			<#for arg in &args #{
-				#arg: ::gramex::Matcher<#matched_type>,
+				#arg: __Matcher<#matched_type>,
 			}>
 			(#for arg in &args #{ #arg })
 		};
@@ -619,11 +651,14 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 }
 
 pub fn gen_matcher(mut stream: &mut TokenStream, matcher: &Matcher) {
-	let matched_type = matcher.matched_type.as_ref().unwrap();
+	let Some(matched_type) = matcher.matched_type.as_ref() else { return };
 	chunk!(stream,
 		struct Matcher;
 		#do {
-			gen_matcher_impl(stream, &ident!("Matcher"), &matcher.expr, matched_type, &[], |_, _| ());
+			gen_matcher_impl(
+				stream, &ident!("Matcher"), &matcher.expr, matched_type,
+				&[], |_, _| ()
+			);
 		}
 		Matcher
 	)
@@ -633,19 +668,26 @@ pub fn gen_match_expr(
 	mut stream: &mut TokenStream, capture: bool, error: bool, value: TokenStream,
 	expr: &Expr,
 ) {
+	let mode = Mode { is_concrete: true, capture, error };
 	chunk!(stream,
+		#match (capture, error) {
+			(true, false) => # { use ::gramex::modes::Capture as __Capture; }
+			(false, true) => # { use ::gramex::modes::Check as __Check; }
+			(true, true) => # { use ::gramex::modes::{
+				Capture as __Capture, Check as __Check, Parse as __Parse
+			}; }
+			_ => {}
+		}
 		let __value = #value;
 		let __off = &mut 0;
-		type __M = #match (capture, error) {
-			(false, false) => #{ ::gramex::modes::Test },
-			(false, true) => #{ ::gramex::modes::Check },
-			(true, false) => #{ ::gramex::modes::Capture },
-			(true, true) => #{ ::gramex::modes::Parse },
-		};
-		#do { gen_match_root(stream, expr, capture) }
+		#do { gen_match_root(stream, expr, mode) }
 		if res.is_ok() && *__off != __value.__len() {
-			res = __M::err(|| ::gramex::MatchError::excess(*__off));
+			res = #mode::err(|| ::gramex::MatchError::excess(*__off));
 		}
-		::gramex::IntoResult::into_result::<__M>(res)
+		res #match (capture, error) {
+			(false, false) => #{ .is_ok() },
+			(true, false) => #{ .ok() },
+			_ => {}
+		}
 	)
 }

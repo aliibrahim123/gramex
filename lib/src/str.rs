@@ -96,7 +96,7 @@ define_matcher!(RangeInclusive<char>,
 		_ => (false, 0),
 	},
 	Expected::Between(
-		format!("{}", matcher.start()).into(),
-		format!("{}", matcher.end()).into()
+		format!("\"{}\"", matcher.start()).into(),
+		format!("\"{}\"", matcher.end()).into()
 	)
 );

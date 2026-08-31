@@ -109,7 +109,7 @@ fn resolve_captures(
 		_ => {}
 	}
 }
-fn forbid_captures(expr: &Expr, errors: &mut Vec<Error>) {
+pub fn forbid_captures(expr: &Expr, errors: &mut Vec<Error>) {
 	match expr {
 		Expr::And(exprs) | Expr::Seq(exprs) | Expr::Or(exprs) => {
 			for expr in exprs {
@@ -160,7 +160,7 @@ fn has_capture(expr: &Expr) -> bool {
 
 fn default_cap(matched_type: Option<&TokenStream>) -> TokenStream {
 	if let Some(m) = matched_type {
-		quote! { <#m as ::gramex::MatchAble>::Slice<'src> }
+		quote! { <#m as __MatchAble>::Slice<'src> }
 	} else {
 		TokenStream::new()
 	}
@@ -189,7 +189,7 @@ fn resolve_capture_type(
 			return Err(());
 		}
 
-		Ok((quote! { captures::#item_ident::<'src> }, create(item_ident)))
+		Ok((quote! { #item_ident::<'src> }, create(item_ident)))
 	};
 
 	match &mut cap.ty {
@@ -440,8 +440,8 @@ pub fn analyze_expr(expr: &mut Expr, concrete_types: bool, ctx: &mut Context) {
 }
 
 pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) {
-	if ctx.matched_type.is_none() {
-		let msg = "expected specified matched type for matchers arguments";
+	if ctx.matched_type.is_none() && matcher.matched_type.is_none() {
+		let msg = "expected specified matched type for matchers";
 		err!(ctx, msg, Span::call_site());
 		return;
 	};

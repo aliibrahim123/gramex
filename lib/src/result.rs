@@ -7,6 +7,7 @@ pub enum Expected {
 	#[default]
 	None,
 	A(Cow<'static, str>),
+	Not(Cow<'static, str>),
 	OneOf(Vec<Cow<'static, str>>),
 	Between(Cow<'static, str>, Cow<'static, str>),
 }
@@ -16,6 +17,7 @@ impl Expected {
 			Self::None => "".into(),
 			Self::A(Cow::Borrowed(thing)) => Cow::Borrowed(thing),
 			Self::A(Cow::Owned(thing)) => thing.clone().into(),
+			Self::Not(thing) => format!("not {thing}").into(),
 			Self::OneOf(things) => {
 				let mut s = String::from("one of ");
 				for (i, thing) in things.iter().enumerate() {
@@ -116,6 +118,7 @@ impl<T> IntoResult for Option<T> {
 		}
 	}
 }
+
 impl<T> IntoResult for Result<T, MatchError> {
 	type Output = T;
 	fn into_result<M: Mode>(self, _off: usize) -> MatchResult<T, M> {

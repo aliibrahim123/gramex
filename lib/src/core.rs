@@ -46,7 +46,7 @@ pub trait Mode {
 	type WithoutError: Mode<Error = ()>;
 
 	fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
-	fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self>;
+	fn err<T>(err: impl FnOnce() -> MatchError) -> Result<T, Self::Error>;
 
 	fn wrap_success<T>(val: T) -> Self::Success<T>;
 	fn wrap_error(err: MatchError) -> Self::Error;
@@ -97,10 +97,10 @@ macro_rules! decl_mod {
 					Ok(())
 				})?
 				#[inline]
-				$($err_true fn err<T>(err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
+				$($err_true fn err<T>(err: impl FnOnce() -> MatchError) -> Result<T, Self::Error> {
 					Err(err())
 				})?
-				$($err_false fn err<T>(_err: impl FnOnce() -> MatchError) -> MatchResult<T, Self> {
+				$($err_false fn err<T>(_err: impl FnOnce() -> MatchError) -> Result<T, Self::Error> {
 					Err(())
 				})?
 

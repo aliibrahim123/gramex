@@ -504,11 +504,15 @@ pub struct MatchExpr {
 
 pub fn parse_match_expr(cur: &mut Cursor) -> MatchExpr {
 	let matched_type = match cur.try_kw("for") {
-		true => cur.eat_until("a type", |cur| cur.test_punct(',')),
+		true => {
+			let ty = cur.eat_until("a type", |cur| cur.test_punct(','));
+			cur.punct(',');
+			ty
+		}
 		false => None,
 	};
 	let value = cur
-		.eat_until("an expression", |cur| cur.test_punct('<'))
+		.eat_until("an expression", |cur| cur.test_punct(','))
 		.unwrap_or_else(|| quote!(()));
 	cur.punct(',');
 	let expr = parse_expr(cur);
