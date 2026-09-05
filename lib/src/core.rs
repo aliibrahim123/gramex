@@ -191,66 +191,6 @@ impl<T: MatchAble + ?Sized> Matcher<T> for () {
 	}
 }
 
-#[doc(hidden)]
-pub trait LifedMatchFn<'src, T: MatchAble + ?Sized + 'src> {
-	type Capture: 'src;
-	type Res: IntoResult<Output = Self::Capture>;
-	fn call(&self, matched: &'src T, off: &mut usize) -> Self::Res;
-}
-
-impl<'src, T: MatchAble + ?Sized + 'src, R, F> LifedMatchFn<'src, T> for F
-where
-	F: Fn(&'src T, &mut usize) -> R,
-	R: IntoResult,
-	<R as IntoResult>::Output: 'src,
-{
-	type Capture = <R as IntoResult>::Output;
-	type Res = R;
-
-	fn call(&self, matched: &'src T, off: &mut usize) -> R {
-		self(matched, off)
-	}
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct MatchFn<T: MatchAble + ?Sized, F> {
-	fun: F,
-	_marker: PhantomData<fn(&T)>,
-}
-impl<T: MatchAble + ?Sized, F> MatchFn<T, F>
-where
-	F: for<'src> LifedMatchFn<'src, T>,
-{
-	pub fn new(fun: F) -> Self {
-		Self { fun, _marker: PhantomData }
-	}
-}
-impl<T: MatchAble + ?Sized, F, G> MatchFn<T, F>
-where
-	F: Fn(&T, &mut usize) -> G,
-	G: IntoResult,
-{
-	#[doc(hidden)]
-	pub fn new_with_infer(fun: F) -> Self {
-		Self { fun, _marker: PhantomData }
-	}
-}
-impl<T: MatchAble + ?Sized, F> Matcher<T> for MatchFn<T, F>
-where
-	F: for<'src> LifedMatchFn<'src, T>,
-{
-	type Capture<'src>
-		= <F as LifedMatchFn<'src, T>>::Capture
-	where
-		T: 'src;
-
-	fn do_match<'src, M: Mode>(
-		&self, matched: &'src T, off: &mut usize,
-	) -> MatchResult<Self::Capture<'src>, M> {
-		LifedMatchFn::call(&self.fun, matched, off).into_result::<M>(*off)
-	}
-}
-
 fn match_no_excess<'src, T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
 	value: &'src T, matcher: U,
 ) -> MatchResult<U::Capture<'src>, M> {

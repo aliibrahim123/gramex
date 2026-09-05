@@ -196,8 +196,9 @@ fn parse_atom(cur: &mut Cursor) -> Option<Atom> {
 	} else if let Some(block) = cur.try_group(Brace) {
 		let matcher = match block.stream().into_iter().next() {
 			Some(TokenTree::Punct(punct)) if punct.as_char() == '|' => {
-				let matcher =
-					quote! { ::gramex::MatchFn::new_with_infer(#{block.stream()}) };
+				let matcher = quote! {
+					::gramex::general::MatchFn::new_with_infer(#{block.stream()})
+				};
 				Group::new(Delimiter::None, matcher).into()
 			}
 			_ => block.into(),

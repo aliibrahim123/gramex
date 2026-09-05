@@ -55,7 +55,7 @@ macro_rules! define_matcher {
 				let (res, len) = $logic;
 				if res {
 					*off += len;
-					M::ok(|| &$rem[..len])
+					Ok(M::wrap_success(&$rem[..len]))
 				} else if len > $rem.len() {
 					*off = matched.len();
 					M::err(|| MatchError::incomplete(self.expected(), *off))
@@ -115,3 +115,133 @@ define_matcher!(RangeInclusive<char>,
 		wrap_with_quotes(matcher.end()),
 	)
 );
+
+macro_rules! define_pattern_matcher {
+	($name:ident, |$char:ident| $logic:expr, $kind:literal) => {
+		#[allow(nonstandard_style)]
+		pub struct $name;
+		impl Matcher<str> for $name {
+			type Capture<'src> = char;
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src str, off: &mut usize,
+			) -> MatchResult<char, M> {
+				let Some($char) = matched.get_token(*off) else {
+					return M::err(|| {
+						MatchError::incomplete(self.expected(), matched.len())
+					});
+				};
+				let res = $logic;
+				if res {
+					*off += $char.len_utf8();
+					Ok(M::wrap_success($char))
+				} else {
+					M::err(|| MatchError::mismatch(self.expected(), *off))
+				}
+			}
+			fn expected(&self) -> Expected {
+				Expected::A(LeanString::from_static_str($kind))
+			}
+		}
+	};
+}
+
+define_pattern_matcher!(upper, |char| char.is_uppercase(), "an uppercase character");
+define_pattern_matcher!(lower, |char| char.is_lowercase(), "a lowercase character");
+define_pattern_matcher!(alpha, |char| char.is_alphabetic(), "an alphabetic character");
+define_pattern_matcher!(num, |char| char.is_numeric(), "a numeric character");
+define_pattern_matcher!(
+	alphanum,
+	|char| char.is_alphanumeric(),
+	"an alphanumeric character"
+);
+define_pattern_matcher!(ws, |char| char.is_whitespace(), "a whitespace character");
+define_pattern_matcher!(control, |char| char.is_control(), "a control character");
+define_pattern_matcher!(ascii, |char| char.is_ascii(), "an ascii character");
+define_pattern_matcher!(
+	ascii_upper,
+	|char| char.is_ascii_uppercase(),
+	"an ascii uppercase character"
+);
+define_pattern_matcher!(
+	ascii_lower,
+	|char| char.is_ascii_lowercase(),
+	"an ascii lowercase character"
+);
+define_pattern_matcher!(
+	ascii_alpha,
+	|char| char.is_ascii_alphabetic(),
+	"an ascii alphabetic character"
+);
+define_pattern_matcher!(
+	ascii_alphanum,
+	|char| char.is_ascii_alphanumeric(),
+	"an ascii alphanumeric character"
+);
+define_pattern_matcher!(
+	ascii_ws,
+	|char| char.is_ascii_whitespace(),
+	"an ascii whitespace character"
+);
+define_pattern_matcher!(
+	ascii_control,
+	|char| char.is_ascii_control(),
+	"an ascii control character"
+);
+define_pattern_matcher!(
+	ascii_printable,
+	|char| char.is_ascii_graphic(),
+	"an ascii printable character"
+);
+define_pattern_matcher!(
+	ascii_punct,
+	|char| char.is_ascii_punctuation(),
+	"an ascii punctuation character"
+);
+define_pattern_matcher!(dec, |char| matches!(char, '0'..='9'), "a decimal digit");
+define_pattern_matcher!(
+	hex,
+	|char| matches!(char, '0'..='9' | 'a'..='f' | 'A'..='F'),
+	"a hexadecimal digit"
+);
+define_pattern_matcher!(
+	hex_lower,
+	|char| matches!(char, '0'..='9' | 'a'..='f'),
+	"a lower hexadecimal digit"
+);
+define_pattern_matcher!(
+	hex_upper,
+	|char| matches!(char, '0'..='9' | 'A'..='F'),
+	"an upper hexadecimal digit"
+);
+define_pattern_matcher!(bin, |char| matches!(char, '0'..='1'), "a binary digit");
+define_pattern_matcher!(octal, |char| matches!(char, '0'..='7'), "an octal digit");
+
+pub fn digit(radix: u8) -> Digit {
+	assert!(radix >= 2 && radix <= 36);
+	Digit(radix)
+}
+pub struct Digit(u8);
+impl Matcher<str> for Digit {
+	type Capture<'src>
+		= char
+	where
+		str: 'src;
+	fn do_match<'src, M: Mode>(
+		&self, matched: &'src str, off: &mut usize,
+	) -> MatchResult<char, M> {
+		let Some(char) = matched.get_token(*off) else {
+			return M::err(|| MatchError::incomplete(self.expected(), *off));
+		};
+		if char.is_digit(self.0 as u32) {
+			*off += char.len_utf8();
+			Ok(M::wrap_success(char))
+		} else {
+			M::err(|| MatchError::mismatch(self.expected(), *off))
+		}
+	}
+	fn expected(&self) -> Expected {
+		let mut buf = LeanString::new();
+		write!(buf, "a base-{} digit", self.0).unwrap();
+		Expected::A(buf)
+	}
+}

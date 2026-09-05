@@ -9,8 +9,9 @@ pub use gramex_macro::*;
 mod core;
 pub mod general;
 pub mod result;
+#[cfg(feature = "str")]
 pub mod str;
-pub use core::{MatchAble, MatchFn, Matcher, Mode, check, matches, parse, try_match};
+pub use core::{MatchAble, Matcher, Mode, check, matches, parse, try_match};
 pub mod modes {
 	pub use crate::core::{Capture, Check, Parse, Test};
 }

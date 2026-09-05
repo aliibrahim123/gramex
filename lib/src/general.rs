@@ -4,12 +4,13 @@ use lean_string::LeanString;
 
 use crate::{
 	MatchAble, Matcher, Mode,
-	result::{Expected, MatchError, MatchResult},
+	result::{Expected, IntoResult, MatchError, MatchResult},
 };
 
+#[allow(nonstandard_style)]
 #[derive(Debug, Clone, Copy)]
-pub struct End;
-impl<T: MatchAble + ?Sized> Matcher<T> for End {
+pub struct end;
+impl<T: MatchAble + ?Sized> Matcher<T> for end {
 	type Capture<'src>
 		= ()
 	where
@@ -199,7 +200,7 @@ impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
 }
 
 pub fn delim_list<T, Start, Item, Sep, End>(
-	start: Start, item: Item, sep: Sep, end: End,
+	start: Start, item: Item, sep: Sep, _end: End,
 ) -> DelimList<Start, Item, Sep, End>
 where
 	T: MatchAble + ?Sized,
@@ -208,7 +209,7 @@ where
 	Sep: Matcher<T>,
 	End: Matcher<T>,
 {
-	DelimList(start, item, sep, end)
+	DelimList(start, item, sep, _end)
 }
 pub struct DelimList<Start, Item, Sep, End>(Start, Item, Sep, End);
 impl<
@@ -226,11 +227,11 @@ impl<
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<Self::Capture<'src>, M> {
-		let Self(start, item, sep, end) = self;
+		let Self(start, item, sep, _end) = self;
 		let mut items = Vec::new();
 		start.do_match::<M::WithoutCapture>(matched, off)?;
 		loop {
-			if atomic(end).test(matched, off) {
+			if atomic(_end).test(matched, off) {
 				break;
 			}
 			let item = item.do_match::<M>(matched, off)?;
@@ -246,5 +247,65 @@ impl<
 	}
 	fn expected(&self) -> Expected {
 		self.0.expected()
+	}
+}
+
+#[doc(hidden)]
+pub trait LifedMatchFn<'src, T: MatchAble + ?Sized + 'src> {
+	type Capture: 'src;
+	type Res: IntoResult<Output = Self::Capture>;
+	fn call(&self, matched: &'src T, off: &mut usize) -> Self::Res;
+}
+
+impl<'src, T: MatchAble + ?Sized + 'src, R, F> LifedMatchFn<'src, T> for F
+where
+	F: Fn(&'src T, &mut usize) -> R,
+	R: IntoResult,
+	<R as IntoResult>::Output: 'src,
+{
+	type Capture = <R as IntoResult>::Output;
+	type Res = R;
+
+	fn call(&self, matched: &'src T, off: &mut usize) -> R {
+		self(matched, off)
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MatchFn<T: MatchAble + ?Sized, F> {
+	fun: F,
+	_marker: PhantomData<fn(&T)>,
+}
+impl<T: MatchAble + ?Sized, F> MatchFn<T, F>
+where
+	F: for<'src> LifedMatchFn<'src, T>,
+{
+	pub fn new(fun: F) -> Self {
+		Self { fun, _marker: PhantomData }
+	}
+}
+impl<T: MatchAble + ?Sized, F, G> MatchFn<T, F>
+where
+	F: Fn(&T, &mut usize) -> G,
+	G: IntoResult,
+{
+	#[doc(hidden)]
+	pub fn new_with_infer(fun: F) -> Self {
+		Self { fun, _marker: PhantomData }
+	}
+}
+impl<T: MatchAble + ?Sized, F> Matcher<T> for MatchFn<T, F>
+where
+	F: for<'src> LifedMatchFn<'src, T>,
+{
+	type Capture<'src>
+		= <F as LifedMatchFn<'src, T>>::Capture
+	where
+		T: 'src;
+
+	fn do_match<'src, M: Mode>(
+		&self, matched: &'src T, off: &mut usize,
+	) -> MatchResult<Self::Capture<'src>, M> {
+		LifedMatchFn::call(&self.fun, matched, off).into_result::<M>(*off)
 	}
 }
