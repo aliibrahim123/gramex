@@ -17,3 +17,4 @@ std = []
 
 [dependencies]
 gramex-macro = { version = "0.1.0", path = "../macro" }
+lean_string = "0.7.0"

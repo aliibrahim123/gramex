@@ -1,35 +1,27 @@
 use core::{marker::PhantomData, ops::Range};
 
-use crate::{
-	Expected, MatchResult,
-	result::{IntoResult, MatchError},
-};
+use crate::result::{Expected, IntoResult, MatchError, MatchResult};
 
 pub trait MatchAble {
+	type Token<'src>
+	where
+		Self: 'src;
 	type Slice<'src>
 	where
 		Self: 'src;
 
 	fn len(&self) -> usize;
 	fn slice<'src>(&'src self, range: Range<usize>) -> Option<Self::Slice<'src>>;
-	fn skip_n(&self, off: &mut usize, n: usize) -> bool {
+	fn get_token<'src>(&'src self, off: usize) -> Option<Self::Token<'src>>;
+	fn skip_n<M: Mode>(&self, off: &mut usize, n: usize) -> MatchResult<(), M> {
 		let len = self.len();
-		let overflowed = *off + n > len;
-		*off = if overflowed { len } else { *off + n };
-		!overflowed
-	}
-
-	#[doc(hidden)]
-	fn __len(&self) -> usize {
-		self.len()
-	}
-	#[doc(hidden)]
-	fn __slice<'src>(&'src self, range: Range<usize>) -> Option<Self::Slice<'src>> {
-		self.slice(range)
-	}
-	#[doc(hidden)]
-	fn __skip_n(&self, off: &mut usize, n: usize) -> bool {
-		self.skip_n(off, n)
+		*off += n;
+		if *off > len {
+			*off = len;
+			M::err(|| MatchError::incomplete(Expected::SomeThing, len))
+		} else {
+			Ok(M::wrap_success(()))
+		}
 	}
 }
 
@@ -170,18 +162,32 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	fn expected(&self) -> Expected {
 		Expected::None
 	}
+}
 
-	#[inline]
-	#[doc(hidden)]
-	fn __do_match<'src, M: Mode>(
+impl<T: MatchAble + ?Sized, U: Matcher<T> + ?Sized> Matcher<T> for &U {
+	type Capture<'src>
+		= U::Capture<'src>
+	where
+		T: 'src;
+	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
-	) -> MatchResult<Self::Capture<'src>, M> {
-		self.do_match::<M>(matched, off)
+	) -> MatchResult<U::Capture<'src>, M> {
+		(*self).do_match::<M>(matched, off)
 	}
+	fn expected(&self) -> Expected {
+		(*self).expected()
+	}
+}
 
-	#[doc(hidden)]
-	fn __expected(&self) -> Expected {
-		self.expected()
+impl<T: MatchAble + ?Sized> Matcher<T> for () {
+	type Capture<'src>
+		= ()
+	where
+		T: 'src;
+	fn do_match<'src, M: Mode>(
+		&self, _matched: &'src T, _off: &mut usize,
+	) -> MatchResult<(), M> {
+		Ok(M::wrap_success(()))
 	}
 }
 
@@ -219,6 +225,16 @@ where
 		Self { fun, _marker: PhantomData }
 	}
 }
+impl<T: MatchAble + ?Sized, F, G> MatchFn<T, F>
+where
+	F: Fn(&T, &mut usize) -> G,
+	G: IntoResult,
+{
+	#[doc(hidden)]
+	pub fn new_with_infer(fun: F) -> Self {
+		Self { fun, _marker: PhantomData }
+	}
+}
 impl<T: MatchAble + ?Sized, F> Matcher<T> for MatchFn<T, F>
 where
 	F: for<'src> LifedMatchFn<'src, T>,
@@ -233,4 +249,30 @@ where
 	) -> MatchResult<Self::Capture<'src>, M> {
 		LifedMatchFn::call(&self.fun, matched, off).into_result::<M>(*off)
 	}
+}
+
+fn match_no_excess<'src, T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
+	value: &'src T, matcher: U,
+) -> MatchResult<U::Capture<'src>, M> {
+	let mut off = 0;
+	let res = matcher.do_match::<M>(value, &mut off);
+	if off == value.len() { res } else { M::err(|| MatchError::excess(off)) }
+}
+pub fn matches<T: MatchAble + ?Sized>(value: &T, matcher: impl Matcher<T>) -> bool {
+	match_no_excess::<_, _, Test>(value, matcher).is_ok()
+}
+pub fn check<T: MatchAble + ?Sized>(
+	value: &T, matcher: impl Matcher<T>,
+) -> Result<(), MatchError> {
+	match_no_excess::<_, _, Check>(value, matcher)
+}
+pub fn try_match<'src, T: MatchAble + ?Sized, U: Matcher<T>>(
+	value: &'src T, matcher: U,
+) -> Option<U::Capture<'src>> {
+	match_no_excess::<_, _, Capture>(value, matcher).ok()
+}
+pub fn parse<'src, T: MatchAble + ?Sized, U: Matcher<T>>(
+	value: &'src T, matcher: U,
+) -> Result<U::Capture<'src>, MatchError> {
+	match_no_excess::<_, _, Parse>(value, matcher)
 }

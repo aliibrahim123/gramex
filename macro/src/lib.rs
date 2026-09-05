@@ -71,7 +71,13 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 	let mut errors = Vec::new();
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
-	let MatchExpr { matched_type, value, mut expr } = parse_match_expr(&mut cur);
+	let Some(MatchExpr { matched_type, value, mut expr }) = parse_match_expr(&mut cur)
+	else {
+		return quote! {{
+			#for e in errors #{#e}
+			unreachable!()
+		}};
+	};
 
 	let mut ctx = capture::Context {
 		capture_mod: None,
@@ -88,7 +94,7 @@ fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 	quote! { {
 		#for e in errors #{#e}
 		#do { gen_imports(__stream) }
-		#do { gen_match_expr(__stream, capture, error, value, &expr) }
+		#do { gen_match_expr(__stream, capture, error, &value, &expr) }
 	} }
 }
 

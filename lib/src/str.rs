@@ -1,34 +1,43 @@
-use alloc_crate::{borrow::Cow, boxed::Box, format, rc::Rc, string::String, sync::Arc};
-use core::ops::{Range, RangeInclusive};
+use alloc_crate::{borrow::Cow, boxed::Box, rc::Rc, string::String, sync::Arc};
+use core::{
+	fmt::{Display, Write},
+	ops::{Range, RangeInclusive},
+};
+use lean_string::LeanString;
 
 use crate::{
-	MatchAble, MatchResult, Matcher, Mode,
-	result::{Expected, MatchError},
+	MatchAble, Matcher, Mode,
+	result::{Expected, MatchError, MatchResult},
 };
 
 impl MatchAble for str {
-	type Slice<'a> = &'a str;
+	type Token<'src> = char;
+	type Slice<'src> = &'src str;
 
 	#[inline]
 	fn len(&self) -> usize {
 		self.len()
 	}
 	#[inline]
-	fn slice<'a>(&'a self, range: Range<usize>) -> Option<Self::Slice<'a>> {
+	fn get_token<'src>(&'src self, off: usize) -> Option<char> {
+		self[off..].chars().next()
+	}
+	#[inline]
+	fn slice<'src>(&'src self, range: Range<usize>) -> Option<&'src str> {
 		self.get(range)
 	}
 	#[inline]
-	fn skip_n(&self, off: &mut usize, n: usize) -> bool {
+	fn skip_n<M: Mode>(&self, off: &mut usize, n: usize) -> MatchResult<(), M> {
 		if n == 0 {
-			return true;
+			return Ok(M::wrap_success(()));
 		}
 		let mut chars = self[*off..].chars();
 		if chars.nth(n - 1).is_none() {
 			*off = self.len();
-			false
+			M::err(|| MatchError::incomplete(Expected::SomeThing, *off))
 		} else {
 			*off += self[*off..].len() - chars.as_str().len();
-			true
+			Ok(M::wrap_success(()))
 		}
 	}
 }
@@ -36,11 +45,11 @@ impl MatchAble for str {
 macro_rules! define_matcher {
 	($ty:ty, ($matcher:ident, $rem:ident) => $logic:expr, $expected:expr) => {
 		impl Matcher<str> for $ty {
-			type Capture<'a> = &'a str;
+			type Capture<'src> = &'src str;
 			#[inline]
-			fn do_match<'a, M: Mode>(
-				&self, matched: &'a str, off: &mut usize,
-			) -> MatchResult<Self::Capture<'a>, M> {
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src str, off: &mut usize,
+			) -> MatchResult<&'src str, M> {
 				let $rem = &matched[*off..];
 				let $matcher = self;
 				let (res, len) = $logic;
@@ -62,24 +71,30 @@ macro_rules! define_matcher {
 	};
 }
 
+fn wrap_with_quotes(a: impl Display) -> LeanString {
+	let mut str = LeanString::new();
+	write!(str, "\"{a}\"").unwrap();
+	str
+}
+
 define_matcher!(str,
 	(matcher, rem) => (rem.starts_with(matcher), matcher.len()),
-	Expected::A(format!("\"{matcher}\"").into())
+	Expected::A(wrap_with_quotes(matcher))
 );
 
 define_matcher!(char,
 	(matcher, rem) => (rem.starts_with(*matcher), matcher.len_utf8()),
-	Expected::A(format!("\"{matcher}\"").into())
+	Expected::A(wrap_with_quotes(matcher))
 );
 
 macro_rules! impl_ref {
 	[$($(#for <$life:lifetime>)? $T:ty),+] => {
 		$(impl$(<$life>)? Matcher<str> for $T {
-			type Capture<'a> = &'a str;
+			type Capture<'src> = &'src str;
 			#[inline]
-			fn do_match<'a, M: Mode>(
-				&self, matched: &'a str, off: &mut usize,
-			) -> MatchResult<Self::Capture<'a>, M> {
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src str, off: &mut usize,
+			) -> MatchResult<Self::Capture<'src>, M> {
 				AsRef::<str>::as_ref(self).do_match::<M>(matched, off)
 			}
 			fn expected(&self) -> Expected {
@@ -96,7 +111,7 @@ define_matcher!(RangeInclusive<char>,
 		_ => (false, 0),
 	},
 	Expected::Between(
-		format!("\"{}\"", matcher.start()).into(),
-		format!("\"{}\"", matcher.end()).into()
+		wrap_with_quotes(matcher.start()),
+		wrap_with_quotes(matcher.end()),
 	)
 );

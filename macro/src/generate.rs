@@ -63,6 +63,7 @@ struct Context<'a> {
 	label: BlockLable<'a>,
 	mode: Mode,
 	expected_fuel: u8,
+	matched_type: Option<&'a TokenStream>,
 }
 impl Context<'_> {
 	fn next_label(&self) -> Context {
@@ -75,97 +76,120 @@ impl Context<'_> {
 
 fn fork<'a>(
 	mut stream: &mut TokenStream, ctx: &'a Context<'a>,
-	item: impl Fn(&mut TokenStream, Context<'a>),
+	item: impl Fn(&mut TokenStream, &Context<'a>),
 ) {
 	let child_ctx = ctx.next_label();
 	chunk!(stream, #{child_ctx.label}: {
-		#do { item(stream, child_ctx) }
+		#do { item(stream, &child_ctx) }
 		Ok(#{child_ctx.mode}::wrap_success(()))
 	})
 }
 
 const DEFAULT_EXPECTED_FUEL: u8 = 3;
 
-fn gen_expected_atom(stream: &mut TokenStream, atom: &Atom, fuel: u8) {
+fn gen_expected_atom(
+	mut stream: &mut TokenStream, atom: &Atom, fuel: u8,
+	matched_type: Option<&TokenStream>,
+) {
+	if matched_type.is_none() {
+		return chunk!(stream, __Expected::None);
+	}
 	match atom {
-		Atom::Any => chunk!(stream, __::EXPECTED_ANY),
+		Atom::Any => chunk!(stream, __Expected::SomeThing),
 		Atom::Matcher(matcher) => {
-			chunk!(stream, (&#matcher).__expected())
+			chunk!(stream, <_ as __Matcher<#{matched_type}>>::expected(&#matcher))
 		}
-		Atom::Group(expr) => gen_expected(stream, expr, fuel),
+		Atom::Group(expr) => gen_expected(stream, expr, fuel, matched_type),
 		Atom::Call { .. } => chunk!(stream, __Expected::None),
 	}
 }
 
-#[rustfmt::skip]
-fn gen_expected_or(stream: &mut TokenStream, exprs: &[Expr], fuel: u8) {
+fn gen_expected_or(
+	stream: &mut TokenStream, exprs: &[Expr], fuel: u8,
+	matched_type: Option<&TokenStream>,
+) {
 	chunk!(stream, __::expected_or(
 		&[#for expr in exprs #{
-			#do { gen_expected(stream, expr, fuel - 1) },
+			#do { gen_expected(stream, expr, fuel - 1, matched_type) },
 		}]
 	));
 }
 
-fn gen_expected(stream: &mut TokenStream, expr: &Expr, fuel: u8) {
-	if fuel == 0 {
+fn gen_expected(
+	mut stream: &mut TokenStream, expr: &Expr, fuel: u8,
+	matched_type: Option<&TokenStream>,
+) {
+	if fuel == 0 || matched_type.is_none() {
 		chunk!(stream, __Expected::None);
 		return;
 	}
 	match expr {
 		Expr::Unit { not: true, atom, .. } if fuel > 1 => chunk!(stream,
-			__::expected_not(#do { gen_expected_atom(stream, atom, fuel - 1) })
+			__::expected_not(#do { gen_expected_atom(stream, atom, fuel - 1, matched_type) })
 		),
 		Expr::Unit { not: true, .. } => chunk!(stream, __Expected::None),
-		Expr::Unit { atom, .. } => gen_expected_atom(stream, atom, fuel),
+		Expr::Unit { atom, .. } => gen_expected_atom(stream, atom, fuel, matched_type),
 		Expr::Range(left, right) => {
-			chunk!(stream, (#left..=#right).__expected())
+			chunk!(stream, <_ as __Matcher<#{matched_type}>>::expected(&(#left..=#right)))
 		}
-		Expr::And(exprs) | Expr::Seq(exprs) => gen_expected(stream, &exprs[0], fuel),
-		Expr::Imply { cond, .. } => gen_expected(stream, cond, fuel),
-		Expr::Capture(cap) => gen_expected(stream, &cap.expr, fuel),
+		Expr::And(exprs) | Expr::Seq(exprs) => {
+			gen_expected(stream, &exprs[0], fuel, matched_type)
+		}
+		Expr::Imply { cond, .. } => gen_expected(stream, cond, fuel, matched_type),
+		Expr::Capture(cap) => gen_expected(stream, &cap.expr, fuel, matched_type),
 		Expr::Error => {}
-		Expr::Or(exprs) => gen_expected_or(stream, exprs, fuel),
+		Expr::Or(exprs) => gen_expected_or(stream, exprs, fuel, matched_type),
 	}
 }
 
 fn gen_error_not(
-	mut stream: &mut TokenStream, atom: &Atom, is_mismatch: impl ToTokens, ctx: Context,
+	mut stream: &mut TokenStream, atom: &Atom, is_mismatch: impl ToTokens, ctx: &Context,
 ) {
 	if !ctx.mode.error {
 		chunk!(stream, break #{ctx.label} Err(()); );
 	} else {
 		chunk!(stream, break #{ctx.label} #{ctx.mode}::err(
 			|| __::error_not(
-				#do { gen_expected_atom(stream, atom, ctx.expected_fuel - 1) },
+				#do { gen_expected_atom(stream, atom, ctx.expected_fuel - 1, ctx.matched_type) },
 				#is_mismatch, *__orig
 			)
 		));
 	}
 }
 
-fn gen_atom_inline(mut stream: &mut TokenStream, atom: &Atom, ctx: Context) {
+fn gen_call_matcher(stream: &mut TokenStream, arg: &Matcher) {
+	let Expr::Capture(cap) = &arg.expr else { unreachable!() };
+	if let Expr::Unit { atom, not: false, near: false, rep: Rep::ONCE } = &cap.expr
+		&& let Atom::Matcher(matcher) = atom
+	{
+		matcher.to_tokens(stream);
+	} else {
+		gen_matcher(stream, arg);
+	}
+}
+
+fn gen_atom_inline(mut stream: &mut TokenStream, atom: &Atom, ctx: &Context) {
 	match atom {
 		Atom::Any => chunk!(stream,
-			if __value.__skip_n(__off, 1) { #{ctx.mode}::ok(|| ()) }
-			else {
-				#if !ctx.mode.error #{ Err(()) }
-				#else #{ #{ctx.mode}::err(|| __::error_any(*__off)) }
-			}
+			<_ as __MatchAble>::skip_n::<#{ctx.mode.no_cap()}>(__value, __off, 1)
 		),
 		Atom::Matcher(matcher) => chunk!(stream,
-			(&#matcher).__do_match::<#{ctx.mode.no_cap()}>(&__value, __off)
+			<_ as __Matcher<_>>::do_match::<#{ctx.mode.no_cap()}>(&#matcher, __value, __off)
 		),
 		Atom::Call { path, args } => chunk!(stream,
-			#for part in path #{ #part }(
-				#for arg in args #{ { #do { gen_matcher(stream, arg) } }, }
-			).__do_match::<#{ctx.mode.no_cap()}>(&__value, __off)
+			<_ as __Matcher<_>>::do_match::<#{ctx.mode.no_cap()}>(
+				&#for part in path #{ #part }(
+					#for arg in args #{{ #do { gen_call_matcher(stream, arg) } }, }
+				),
+				__value, __off
+			)
 		),
 		Atom::Group(expr) => {
-			fork(stream, &ctx, |stream, ctx| gen_expr(stream, expr, ctx))
+			fork(stream, &ctx, |stream, ctx| gen_expr(stream, expr, &ctx))
 		}
 	}
 }
-fn gen_atom(mut stream: &mut TokenStream, atom: &Atom, ctx: Context) {
+fn gen_atom(mut stream: &mut TokenStream, atom: &Atom, ctx: &Context) {
 	match atom {
 		Atom::Group(expr) => gen_expr(&mut stream, expr, ctx),
 		_ => chunk!(stream,
@@ -176,8 +200,8 @@ fn gen_atom(mut stream: &mut TokenStream, atom: &Atom, ctx: Context) {
 }
 
 fn gen_rep_complex(
-	stream: &mut TokenStream, rep: Rep, ctx: Context, do_fork: bool,
-	item: impl Fn(&mut TokenStream, Context),
+	stream: &mut TokenStream, rep: Rep, ctx: &Context, do_fork: bool,
+	item: impl Fn(&mut TokenStream, &Context),
 ) {
 	let Rep(start, end) = rep;
 	chunk!(stream, {
@@ -185,7 +209,7 @@ fn gen_rep_complex(
 		loop {
 			let __start = *__off;
 			if let Err(err) = #do {
-				if do_fork { fork(stream, &ctx, item) }
+				if do_fork { fork(stream, ctx, item) }
 				else { item(stream, ctx) }
 			} {
 				#if start != 0 #{
@@ -203,8 +227,8 @@ fn gen_rep_complex(
 }
 
 fn gen_rep(
-	stream: &mut TokenStream, rep: Rep, ctx: Context, do_fork: bool,
-	item: impl Fn(&mut TokenStream, Context),
+	stream: &mut TokenStream, rep: Rep, ctx: &Context, do_fork: bool,
+	item: impl Fn(&mut TokenStream, &Context),
 ) {
 	if rep == Rep::ONCE {
 		item(stream, ctx);
@@ -221,9 +245,9 @@ fn gen_rep(
 	}
 }
 
-fn gen_unit_near(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
+fn gen_unit_near(stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 	let Expr::Unit { not, rep, atom, .. } = expr else { unreachable!() };
-	let gen_logic = |stream: &mut _, ctx| {
+	let gen_logic = |stream: &mut _, ctx: &_| {
 		gen_rep(stream, *rep, ctx, true, |stream, ctx| gen_atom(stream, atom, ctx))
 	};
 	chunk!(stream, {
@@ -238,29 +262,28 @@ fn gen_unit_near(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 	})
 }
 
-fn gen_unit_not(stream: &mut TokenStream, atom: &Atom, rep: Rep, ctx: Context) {
+fn gen_unit_not(stream: &mut TokenStream, atom: &Atom, rep: Rep, ctx: &Context) {
 	gen_rep(stream, rep, ctx, true, |stream, ctx| {
 		chunk!(stream, {
 			let __orig = &mut *__off;
 			let __off = &mut __orig.clone();
-			let __res = #do { gen_atom_inline(stream, atom, ctx.no_err()) };
-			if __res.is_ok() || __res.is_err() && *__orig == __value.__len() {
+			let __res = #do { gen_atom_inline(stream, atom, &ctx.no_err()) };
+			if __res.is_ok() || __res.is_err() && *__orig == <_ as __MatchAble>::len(__value) {
 				#do { gen_error_not(stream, atom, quote! { __res.is_ok() }, ctx) }
 			}
-			__value.__skip_n(__orig, 1);
+			_ = <_ as __MatchAble>::skip_n::<#{ctx.mode.no_cap().no_err()}>(__value, __orig, 1);
 		})
 	});
 }
 
-fn gen_unit(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
+fn gen_unit(mut stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 	let Expr::Unit { not, near, rep, atom } = expr else { unreachable!() };
 	if *not == false && *near == false && matches!(atom, Atom::Any) && rep.is_exact() {
 		chunk!(stream,
-			if !__value.__skip_n(__off, #{Literal::u32_unsuffixed(rep.0)}) {
-				break #{ctx.label} #if !ctx.mode.error #{ Err(()) }
-				#else #{ #{ctx.mode}::err(|| __::error_any(*__off)) }
-			};
-		);
+			if let Err(err) = <_ as __MatchAble>::skip_n::<#{ctx.mode.no_cap()}>(
+				__value, __off, #{Literal::u32_unsuffixed(rep.0)}
+			) { break #{ctx.label} Err(err) }
+		)
 	} else if *near {
 		gen_unit_near(stream, expr, ctx);
 	} else if *not {
@@ -276,10 +299,10 @@ fn gen_unit(stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 
 fn gen_or_branch(
 	mut stream: &mut TokenStream, expr: &Expr, ind: usize,
-	after: &impl Fn(&mut TokenStream, usize), new_ctx: Context,
+	after: &impl Fn(&mut TokenStream, usize), new_ctx: &Context,
 ) {
 	chunk!(stream,
-		if #do { gen_expr_inline(stream, expr, new_ctx.no_err()) }.is_ok() {
+		if #do { gen_expr_inline(stream, expr, &new_ctx.no_err()) }.is_ok() {
 			#do { after(stream, ind) };
 			break #{new_ctx.label} Ok::<_, ()>(());
 		}
@@ -287,10 +310,10 @@ fn gen_or_branch(
 }
 
 fn gen_or(
-	mut stream: &mut TokenStream, exprs: &[Expr], ctx: Context,
+	mut stream: &mut TokenStream, exprs: &[Expr], ctx: &Context,
 	before: impl Fn(&mut TokenStream, usize), after: impl Fn(&mut TokenStream, usize),
 ) {
-	let new_ctx = ctx.next_label();
+	let new_ctx = &ctx.next_label();
 	chunk!(stream, _ = #{new_ctx.label}: {
 		let __start = *__off;
 		#for (ind, expr) in exprs.iter().enumerate() #{
@@ -310,18 +333,19 @@ fn gen_or(
 		break #{ctx.label} #if !ctx.mode.error #{ Err(()) } 
 		#else #{ #{ctx.mode}::err(|| __::error_or(
 			&[#for expr in exprs #{ 
-				#do { gen_expected(stream, expr, ctx.expected_fuel - 1) }, 
+				#do { gen_expected(stream, expr, ctx.expected_fuel - 1, ctx.matched_type) },
 			}],
-			*__off != __value.__len(), __start
+			*__off != <_ as __MatchAble>::len(__value), __start
 		)) }
 	};)
 }
 
-fn gen_and(stream: &mut TokenStream, exprs: &[Expr], ctx: Context) {
+fn gen_and(stream: &mut TokenStream, exprs: &[Expr], ctx: &Context) {
 	chunk!(stream, {
 		let __start = *__off;
 		#do { gen_expr(stream, &exprs[0], ctx) }
-		let __value = __value.__slice(0..*__off).unwrap();
+		let __value = <_ as __MatchAble>::slice(__value, 0..*__off).unwrap();
+		let __value = __value.__as_matchable();
 		let __off = &mut 0;
 		#for expr in &exprs[1..] #{
 			*__off = __start;
@@ -330,27 +354,32 @@ fn gen_and(stream: &mut TokenStream, exprs: &[Expr], ctx: Context) {
 	});
 }
 
-fn gen_imply(stream: &mut TokenStream, cond: &Expr, expr: &Expr, ctx: Context) {
+fn gen_imply(stream: &mut TokenStream, cond: &Expr, expr: &Expr, ctx: &Context) {
 	chunk!(stream, {
 		let __start = *__off;
-		if #do { gen_expr_inline(stream, cond, ctx.no_err()) }.is_ok() {
+		if #do { gen_expr_inline(stream, cond, &ctx.no_err()) }.is_ok() {
 			#do { gen_expr(stream, expr, ctx) }
 		} else { *__off = __start }
 	})
 }
 
-fn gen_atomic_capture(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
+fn gen_atomic_capture(mut stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 	match expr {
 		Expr::Unit { atom: Atom::Matcher(matcher), .. } => chunk!(stream,
-			(&#matcher).__do_match::<#{ctx.mode}>(&__value, __off)
+			<_ as __Matcher<_>>::do_match::<#{ctx.mode}>(&#matcher, __value, __off)
 		),
 		Expr::Unit { atom: Atom::Call { path, args }, .. } => chunk!(stream,
-			#for part in path #{ #part }(
-				#for arg in args #{ { #do { gen_matcher(stream, arg) } }, }
-			).do_match::<#{ctx.mode}>(&__value, __off)
+			<_ as __Matcher<_>>::do_match::<#{ctx.mode}>(
+				&#for part in path #{ #part }(
+					#for arg in args #{{ #do { gen_call_matcher(stream, arg) } }, }
+				),
+				__value, __off
+			)
 		),
 		Expr::Range(left, right) => chunk!(stream,
-			(#left..=#right).__do_match::<#{ctx.mode}>(&__value, __off)
+			<_ as __Matcher<_>>::do_match::<#{ctx.mode}>(
+				&(#left..=#right), __value, __off
+			)
 		),
 		_ => unreachable!(),
 	}
@@ -381,7 +410,7 @@ fn gen_capture_set(mut stream: &mut TokenStream, ident: &Ident, container: CapCo
 }
 
 fn gen_capture_normal(
-	stream: &mut TokenStream, cap: &Capture, info: &CapInfo, ctx: Context,
+	stream: &mut TokenStream, cap: &Capture, info: &CapInfo, ctx: &Context,
 ) {
 	chunk!(stream, {
 		let __start = *__off;
@@ -396,10 +425,12 @@ fn gen_capture_normal(
 				CapKind::Atomic { .. } => #{
 					#{ctx.mode}::unwrap_success(__::unwrap_result(__cap))
 				},
-				CapKind::Normal { .. } => #{ __value.__slice(__start..*__off).unwrap() },
-				CapKind::UnitStruct => #{
-					#{&info.resolved_type}(__value.__slice(__start..*__off).unwrap())
+				CapKind::Normal { .. } => #{
+					<_ as __MatchAble>::slice(__value, __start..*__off).unwrap()
 				},
+				CapKind::UnitStruct => #{ #{&info.resolved_type}(
+					<_ as __MatchAble>::slice(__value, __start..*__off).unwrap()
+				)},
 				_ => unreachable!(),
 			};
 			#if matches!(&info.kind,
@@ -408,6 +439,8 @@ fn gen_capture_normal(
 				let __cap = __::Into::<#{&info.resolved_type}>::into(__cap);
 			}
 			#if let Some(map) = &cap.map #{
+				let start = __start;
+				let end = *__off;
 				let #{&cap.ident} = __cap;
 				let __cap = #map;
 			}
@@ -416,8 +449,43 @@ fn gen_capture_normal(
 	});
 }
 
+fn gen_capture_fielded_cap(
+	mut stream: &mut TokenStream, info: &CapInfo, map: &Option<TokenStream>,
+) {
+	match &info.kind {
+		CapKind::ReduceMap(fields) => chunk!(stream,
+			let start = __start;
+			let end = *__off;
+			#for field in fields #{
+				let #{&field.name} = #do {
+					gen_capture_unwrwap(stream, &field.name, field.container)
+				};
+			}
+			let __cap = #{map};
+		),
+		CapKind::Tuple(fields) => chunk!(stream,
+			let __cap = (#for field in fields #{
+				#do { gen_capture_unwrwap(stream, &field.name, field.container) },
+			});
+		),
+		CapKind::Struct { is_generated, fields } => chunk!(stream,
+			let __cap = #{&info.resolved_type} {
+				#for field in fields #{
+					#{&field.name}: #do {
+						gen_capture_unwrwap(stream, &field.name, field.container)
+					},
+				}
+				#if *is_generated #{
+					__life_marker: __::PhantomData,
+				}
+			};
+		),
+		_ => unreachable!(),
+	}
+}
+
 fn gen_capture_fielded(
-	stream: &mut TokenStream, cap: &Capture, info: &CapInfo, ctx: Context,
+	stream: &mut TokenStream, cap: &Capture, info: &CapInfo, ctx: &Context,
 ) {
 	let fields = match &info.kind {
 		CapKind::Struct { fields, .. } => fields,
@@ -433,42 +501,17 @@ fn gen_capture_fielded(
 		}
 		#do { gen_expr(stream, &cap.expr, ctx) }
 		#if !ctx.mode.is_concrete #{ if #{ctx.mode}::DO_CAPTURE } {
-			#match &info.kind {
-				CapKind::ReduceMap(_) => #{
-					#for field in fields #{
-						let #{&field.name} = #do {
-							gen_capture_unwrwap(stream, &field.name, field.container)
-						};
-					}
-					let __cap = #{&cap.map};
-				},
-				CapKind::Tuple(_) => #{
-					let __cap = (#for field in fields #{
-						#do { gen_capture_unwrwap(stream, &field.name, field.container) },
-					});
-				}
-				CapKind::Struct { is_generated, .. } => #{
-					let __cap = #{&info.resolved_type} {
-						#for field in fields #{
-							#{&field.name}: #do {
-								gen_capture_unwrwap(stream, &field.name, field.container)
-							},
-						}
-						#if *is_generated #{
-							__life_marker: __::PhantomData,
-						}
-					};
-				}
-				_ => unreachable!()
+			#do {
+				gen_capture_fielded_cap(stream, info, &cap.map);
+				gen_capture_set(stream, &cap.ident, info.container);
 			}
-			#do { gen_capture_set(stream, &cap.ident, info.container) }
 		}
 	});
 }
 
 fn gen_capture_enum(
 	stream: &mut TokenStream, cap: &Capture, vars: &[Option<CapChild>], info: &CapInfo,
-	ctx: Context,
+	ctx: &Context,
 ) {
 	let Expr::Or(exprs) = &cap.expr else { unreachable!() };
 	let before = |mut stream: &mut TokenStream, ind| {
@@ -497,7 +540,7 @@ fn gen_capture_enum(
 	gen_or(stream, exprs, ctx, before, after);
 }
 
-fn gen_capture(stream: &mut TokenStream, cap: &Capture, ctx: Context) {
+fn gen_capture(stream: &mut TokenStream, cap: &Capture, ctx: &Context) {
 	let Some(info) = &cap.info else { return gen_expr(stream, &cap.expr, ctx) };
 
 	gen_rep(stream, cap.rep, ctx, true, |stream, ctx| match &info.kind {
@@ -511,7 +554,7 @@ fn gen_capture(stream: &mut TokenStream, cap: &Capture, ctx: Context) {
 	});
 }
 
-fn gen_expr_inline(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
+fn gen_expr_inline(mut stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 	match expr {
 		Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom }
 			if !matches!(atom, Atom::Group(_)) =>
@@ -519,18 +562,20 @@ fn gen_expr_inline(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 			gen_atom_inline(stream, atom, ctx)
 		}
 		Expr::Range(left, right) => chunk!(stream,
-			(#left..=#right).__do_match::<#{ctx.mode.no_cap()}>(&__value, __off)
+			<_ as __Matcher<_>>::do_match::<#{ctx.mode.no_cap()}>(
+				&(#left..=#right), __value, __off
+			)
 		),
 		_ => fork(stream, &ctx, |stream, ctx| gen_expr(stream, expr, ctx)),
 	}
 }
 
-fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
+fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 	match expr {
 		Expr::Unit { .. } => gen_unit(stream, expr, ctx),
 		Expr::Range(left, right) => chunk!(stream,
 			if let Err(err) =
-				(#left..=#right).__do_match::<#{ctx.mode.no_cap()}>(&__value, __off)
+				(#left..=#right).do_match::<#{ctx.mode.no_cap()}>(__value, __off)
 			{ break #{ctx.label} Err(err) }
 		),
 		Expr::Imply { cond, expr } => gen_imply(stream, cond, expr, ctx),
@@ -547,18 +592,22 @@ fn gen_expr(mut stream: &mut TokenStream, expr: &Expr, ctx: Context) {
 }
 
 pub fn gen_imports(stream: &mut TokenStream) {
-	chunk!(stream, use ::gramex::{
+	chunk!(stream, use ::gramex::{ #do{}
 		__private as __, MatchAble as __MatchAble, Mode as __Mode, Matcher as __Matcher,
-		modes::Test as __Test, Expected as __Expected, #do{}
+		modes::Test as __Test, result::Expected as __Expected, __private::AsMatchAble as _
 	}; )
 }
 
-fn gen_match_root(mut stream: &mut TokenStream, expr: &Expr, mode: Mode) {
+fn gen_match_root(
+	mut stream: &mut TokenStream, expr: &Expr, mode: Mode,
+	matched_type: Option<&TokenStream>,
+) {
 	let count = Cell::new(0);
 	let ctx = Context {
 		label: BlockLable(&count, 0),
 		mode,
 		expected_fuel: DEFAULT_EXPECTED_FUEL,
+		matched_type,
 	};
 	if mode.capture {
 		let Expr::Capture(cap) = &expr else { unreachable!() };
@@ -567,7 +616,7 @@ fn gen_match_root(mut stream: &mut TokenStream, expr: &Expr, mode: Mode) {
 
 		chunk!(stream,
 			let mut #{ident!("__cap__{}", cap.ident)} = None;
-			let mut res = match #do { gen_expr_inline(stream, expr, ctx) } {
+			let mut res = match #do { gen_expr_inline(stream, expr, &ctx) } {
 				Ok(_) => #mode::ok(||
 					#do { gen_capture_unwrwap(stream, &cap.ident, container) }
 				),
@@ -575,7 +624,7 @@ fn gen_match_root(mut stream: &mut TokenStream, expr: &Expr, mode: Mode) {
 			};
 		)
 	} else {
-		chunk!(stream,let mut res = #do { gen_expr_inline(stream, expr, ctx) };);
+		chunk!(stream,let mut res = #do { gen_expr_inline(stream, expr, &ctx) };);
 	}
 }
 
@@ -596,14 +645,14 @@ fn gen_matcher_impl(
 			type Capture<'src> = #capture;
 			fn do_match<'src, __M: __Mode>(
 				&self, __value: &'src #{&matched_type}, __off: &mut usize,
-			) -> ::gramex::MatchResult<Self::Capture<'src>, __M> {
+			) -> ::gramex::result::MatchResult<Self::Capture<'src>, __M> {
 				#do { prologue(stream, true) }
-				#do { gen_match_root(stream, expr, Mode::param()) }
+				#do { gen_match_root(stream, expr, Mode::param(), Some(&matched_type.clone())) }
 				return res;
 			}
 			fn expected(&self) -> __Expected {
 				#do { prologue(stream, false) }
-				#do { gen_expected(stream, &cap.expr, DEFAULT_EXPECTED_FUEL) }
+				#do { gen_expected(stream, &cap.expr, DEFAULT_EXPECTED_FUEL, Some(matched_type)) }
 			}
 		}
 	);
@@ -665,7 +714,7 @@ pub fn gen_matcher(mut stream: &mut TokenStream, matcher: &Matcher) {
 }
 
 pub fn gen_match_expr(
-	mut stream: &mut TokenStream, capture: bool, error: bool, value: TokenStream,
+	mut stream: &mut TokenStream, capture: bool, error: bool, value: &TokenStream,
 	expr: &Expr,
 ) {
 	let mode = Mode { is_concrete: true, capture, error };
@@ -679,10 +728,11 @@ pub fn gen_match_expr(
 			_ => {}
 		}
 		let __value = #value;
+		let __value = __value.__as_matchable();
 		let __off = &mut 0;
-		#do { gen_match_root(stream, expr, mode) }
-		if res.is_ok() && *__off != __value.__len() {
-			res = #mode::err(|| ::gramex::MatchError::excess(*__off));
+		#do { gen_match_root(stream, expr, mode, None) }
+		if res.is_ok() && *__off != <_ as __MatchAble>::len(__value) {
+			res = #mode::err(|| ::gramex::result::MatchError::excess(*__off));
 		}
 		res #match (capture, error) {
 			(false, false) => #{ .is_ok() },

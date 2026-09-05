@@ -1,40 +1,51 @@
 use crate::Mode;
 use alloc_crate::{borrow::Cow, vec::Vec};
-use core::fmt::{Debug, Display, Write};
+use core::{
+	fmt::{self, Debug, Display, Formatter, Write},
+	ops::Range,
+};
+use lean_string::LeanString;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Expected {
 	#[default]
 	None,
-	A(Cow<'static, str>),
-	Not(Cow<'static, str>),
-	OneOf(Vec<Cow<'static, str>>),
-	Between(Cow<'static, str>, Cow<'static, str>),
+	SomeThing,
+	A(LeanString),
+	Not(LeanString),
+	OneOf(Vec<LeanString>),
+	Between(LeanString, LeanString),
 }
-impl Expected {
-	pub fn value(&self) -> Cow<'static, str> {
-		match self {
-			Self::None => "".into(),
-			Self::A(Cow::Borrowed(thing)) => Cow::Borrowed(thing),
-			Self::A(Cow::Owned(thing)) => thing.clone().into(),
-			Self::Not(thing) => format!("not {thing}").into(),
-			Self::OneOf(things) => {
-				let mut s = String::from("one of ");
-				for (i, thing) in things.iter().enumerate() {
-					write!(s, "{}{thing}", if i > 0 { ", " } else { "" }).unwrap();
-				}
-				s.into()
-			}
-			Self::Between(a, b) => format!("between {a} and {b}").into(),
-		}
+impl From<&str> for Expected {
+	fn from(value: &str) -> Self {
+		Self::A(value.into())
+	}
+}
+impl<const N: usize> From<[&str; N]> for Expected {
+	fn from(value: [&str; N]) -> Self {
+		Self::OneOf(value.into_iter().map(|s| s.into()).collect())
+	}
+}
+impl From<Range<&str>> for Expected {
+	fn from(value: Range<&str>) -> Self {
+		Self::Between(value.start.into(), value.end.into())
 	}
 }
 impl Display for Expected {
-	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
-		if !matches!(self, Self::None) {
-			write!(f, "expected {}", self.value())
-		} else {
-			Ok(())
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::None => Ok(()),
+			Self::SomeThing => f.write_str("something"),
+			Self::A(thing) => f.write_str(thing),
+			Self::Not(thing) => write!(f, "not {thing}"),
+			Self::OneOf(things) => {
+				f.write_str("one of ")?;
+				for (i, thing) in things.iter().enumerate() {
+					write!(f, "{}{thing}", if i > 0 { ", " } else { "" })?;
+				}
+				Ok(())
+			}
+			Self::Between(a, b) => write!(f, "between {a} and {b}"),
 		}
 	}
 }
@@ -44,23 +55,7 @@ pub enum MatchErrorKind {
 	MisMatch(Expected),
 	InComplete(Expected),
 	Excess,
-	Other(Cow<'static, str>),
-}
-impl Display for MatchErrorKind {
-	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
-		match self {
-			Self::MisMatch(expected) => match expected {
-				Expected::None => write!(f, "mismatch"),
-				_ => write!(f, "mismatch, {expected}"),
-			},
-			Self::InComplete(expected) => match expected {
-				Expected::None => write!(f, "incomplete input"),
-				_ => write!(f, "incomplete input, {expected}"),
-			},
-			MatchErrorKind::Excess => write!(f, "excess input"),
-			MatchErrorKind::Other(msg) => write!(f, "{msg}"),
-		}
-	}
+	Other(LeanString),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -78,20 +73,28 @@ impl MatchError {
 	pub fn excess(off: usize) -> Self {
 		Self { kind: MatchErrorKind::Excess, off }
 	}
-	pub fn other(msg: impl Into<Cow<'static, str>>, off: usize) -> Self {
+	pub fn other(msg: impl Into<LeanString>, off: usize) -> Self {
 		Self { kind: MatchErrorKind::Other(msg.into()), off }
 	}
 }
 
-impl Display for MatchError
-where
-	usize: Display,
-{
-	fn fmt(&self, f: &mut alloc_crate::fmt::Formatter<'_>) -> alloc_crate::fmt::Result {
-		write!(f, "{} at {}", self.kind, self.off)
+impl Display for MatchError {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		let Self { kind, off } = self;
+		let (kind, expected) = match kind {
+			MatchErrorKind::MisMatch(expected) => ("mismatch", expected),
+			MatchErrorKind::InComplete(expected) => ("incomplete", expected),
+			MatchErrorKind::Excess => ("excess input", &Expected::None),
+			MatchErrorKind::Other(msg) => (msg.as_ref(), &Expected::None),
+		};
+		write!(f, "{kind} at {off}")?;
+		if *expected != Expected::None {
+			write!(f, ", expected {expected}")?;
+		}
+		Ok(())
 	}
 }
-impl core::error::Error for MatchError where usize: Display + Debug {}
+impl core::error::Error for MatchError {}
 
 #[allow(type_alias_bounds)]
 pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;

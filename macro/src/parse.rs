@@ -194,7 +194,15 @@ fn parse_atom(cur: &mut Cursor) -> Option<Atom> {
 	} else if let Some(lit) = cur.try_literal() {
 		Some(Atom::Matcher(lit.into()))
 	} else if let Some(block) = cur.try_group(Brace) {
-		Some(Atom::Matcher(block.into()))
+		let matcher = match block.stream().into_iter().next() {
+			Some(TokenTree::Punct(punct)) if punct.as_char() == '|' => {
+				let matcher =
+					quote! { ::gramex::MatchFn::new_with_infer(#{block.stream()}) };
+				Group::new(Delimiter::None, matcher).into()
+			}
+			_ => block.into(),
+		};
+		Some(Atom::Matcher(matcher))
 	} else if let Some(path) = try_parse_path(cur) {
 		parse_atom_path(cur, path)
 	} else {
@@ -394,7 +402,7 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 
 	let mut expr = parse_expr(cur);
 	let map = match cur.try_multi_punct(['=', '>']) {
-		true => cur.eat_until("a expr", |cur| {
+		true => cur.eat_until("a expression", |cur| {
 			if inside_call {
 				cur.test_punct(',') || cur.test_punct('>')
 			} else {
@@ -502,7 +510,7 @@ pub struct MatchExpr {
 	pub expr: Expr,
 }
 
-pub fn parse_match_expr(cur: &mut Cursor) -> MatchExpr {
+pub fn parse_match_expr(cur: &mut Cursor) -> Option<MatchExpr> {
 	let matched_type = match cur.try_kw("for") {
 		true => {
 			let ty = cur.eat_until("a type", |cur| cur.test_punct(','));
@@ -511,13 +519,11 @@ pub fn parse_match_expr(cur: &mut Cursor) -> MatchExpr {
 		}
 		false => None,
 	};
-	let value = cur
-		.eat_until("an expression", |cur| cur.test_punct(','))
-		.unwrap_or_else(|| quote!(()));
+	let value = cur.eat_until("an expression", |cur| cur.test_punct(','))?;
 	cur.punct(',');
 	let expr = parse_expr(cur);
 	if !cur.is_end() {
 		cur.expected("end of input");
 	}
-	MatchExpr { matched_type, value, expr }
+	Some(MatchExpr { matched_type, value, expr })
 }
