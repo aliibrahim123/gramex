@@ -43,7 +43,7 @@ impl MatchAble for str {
 }
 
 macro_rules! define_matcher {
-	($ty:ty, ($matcher:ident, $rem:ident) => $logic:expr, $expected:expr) => {
+	($ty:ty, |$matcher:ident, $rem:ident| $logic:expr, $expected:expr) => {
 		impl Matcher<str> for $ty {
 			type Capture<'src> = &'src str;
 			#[inline]
@@ -77,13 +77,15 @@ fn wrap_with_quotes(a: impl Display) -> LeanString {
 	str
 }
 
-define_matcher!(str,
-	(matcher, rem) => (rem.starts_with(matcher), matcher.len()),
+define_matcher!(
+	str,
+	|matcher, rem| (rem.starts_with(matcher), matcher.len()),
 	Expected::A(wrap_with_quotes(matcher))
 );
 
-define_matcher!(char,
-	(matcher, rem) => (rem.starts_with(*matcher), matcher.len_utf8()),
+define_matcher!(
+	char,
+	|matcher, rem| (rem.starts_with(*matcher), matcher.len_utf8()),
 	Expected::A(wrap_with_quotes(matcher))
 );
 
@@ -103,17 +105,15 @@ macro_rules! impl_ref {
 		})+
 	};
 }
-impl_ref![String, Box<str>, Rc<str>, Arc<str>, #for<'b> Cow<'b, str>];
+impl_ref![String, #for<'b> Cow<'b, str>];
 
-define_matcher!(RangeInclusive<char>,
-	(matcher, rem) => match rem.chars().next() {
+define_matcher!(
+	RangeInclusive<char>,
+	|matcher, rem| match rem.chars().next() {
 		Some(c) => (matcher.contains(&c), c.len_utf8()),
 		_ => (false, 0),
 	},
-	Expected::Between(
-		wrap_with_quotes(matcher.start()),
-		wrap_with_quotes(matcher.end()),
-	)
+	Expected::Between(wrap_with_quotes(matcher.start()), wrap_with_quotes(matcher.end()),)
 );
 
 macro_rules! define_pattern_matcher {

@@ -5,8 +5,8 @@ pub use core::marker::PhantomData;
 pub use core::option::Option;
 use lean_string::{LeanString, ToLeanString};
 
-use crate::MatchAble;
-use crate::result::{Expected, MatchError};
+use crate::result::{Expected, MatchError, MatchResult};
+use crate::{MatchAble, Mode};
 
 pub trait AsMatchAble {
 	fn __as_matchable(&self) -> &Self {
@@ -53,4 +53,7 @@ pub fn unwrap_result<T, E>(r: Result<T, E>) -> T {
 		Ok(v) => v,
 		Err(_) => unreachable!(),
 	}
+}
+pub fn ok_unit<M: Mode>() -> MatchResult<(), M> {
+	Ok(M::wrap_success(()))
 }

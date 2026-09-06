@@ -1,5 +1,7 @@
 use core::{marker::PhantomData, ops::Range};
 
+use alloc_crate::{rc::Rc, sync::Arc};
+
 use crate::result::{Expected, IntoResult, MatchError, MatchResult};
 
 pub trait MatchAble {
@@ -53,6 +55,8 @@ pub trait Mode {
 		let _ = val;
 		panic!("unwrap_error called on no-error mode")
 	}
+
+	fn map<T, U>(val: Self::Success<T>, fun: impl FnOnce(T) -> U) -> Self::Success<U>;
 }
 
 macro_rules! decl_mod {
@@ -106,6 +110,14 @@ macro_rules! decl_mod {
 
 				$(#[inline] $cap_true fn unwrap_success<T>(val: Self::Success<T>) -> T { val })?
 				$(#[inline] $err_true fn unwrap_error(val: Self::Error) -> MatchError { val })?
+
+				#[inline]
+				$($cap_true fn map<T, U>(val: Self::Success<T>, fun: impl FnOnce(T) -> U)
+					-> Self::Success<U> { fun(val) }
+				)?
+				$($cap_false fn map<T, U>(_: Self::Success<T>, _: impl FnOnce(T) -> U)
+					-> Self::Success<U> { () }
+				)?
 			}
 		};
 	}
@@ -164,6 +176,17 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	}
 }
 
+impl<T: MatchAble + ?Sized> Matcher<T> for () {
+	type Capture<'src>
+		= ()
+	where
+		T: 'src;
+	fn do_match<'src, M: Mode>(
+		&self, _matched: &'src T, _off: &mut usize,
+	) -> MatchResult<(), M> {
+		Ok(M::wrap_success(()))
+	}
+}
 impl<T: MatchAble + ?Sized, U: Matcher<T> + ?Sized> Matcher<T> for &U {
 	type Capture<'src>
 		= U::Capture<'src>
@@ -178,16 +201,36 @@ impl<T: MatchAble + ?Sized, U: Matcher<T> + ?Sized> Matcher<T> for &U {
 		(*self).expected()
 	}
 }
-
-impl<T: MatchAble + ?Sized> Matcher<T> for () {
+macro_rules! as_ref_matcher {
+	[$($ty:ident),+] => {
+		$(impl<T: MatchAble + ?Sized, U: Matcher<T> + ?Sized> Matcher<T> for $ty<U> {
+			type Capture<'src> = U::Capture<'src> where T: 'src;
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src T, off: &mut usize,
+			) -> MatchResult<U::Capture<'src>, M> {
+				AsRef::<U>::as_ref(self).do_match::<M>(matched, off)
+			}
+			fn expected(&self) -> Expected {
+				AsRef::<U>::as_ref(self).expected()
+			}
+		})+
+	};
+}
+as_ref_matcher![Box, Rc, Arc];
+impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Option<U> {
 	type Capture<'src>
-		= ()
+		= Option<U::Capture<'src>>
 	where
 		T: 'src;
 	fn do_match<'src, M: Mode>(
-		&self, _matched: &'src T, _off: &mut usize,
-	) -> MatchResult<(), M> {
-		Ok(M::wrap_success(()))
+		&self, matched: &'src T, off: &mut usize,
+	) -> MatchResult<Option<U::Capture<'src>>, M> {
+		match self {
+			Some(matcher) => matcher
+				.do_match::<M>(matched, off)
+				.map(|suc| M::map(suc, |val| Some(val))),
+			None => Ok(M::wrap_success(None)),
+		}
 	}
 }
 

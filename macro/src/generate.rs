@@ -81,7 +81,7 @@ fn fork<'a>(
 	let child_ctx = ctx.next_label();
 	chunk!(stream, #{child_ctx.label}: {
 		#do { item(stream, &child_ctx) }
-		Ok(#{child_ctx.mode}::wrap_success(()))
+		__::ok_unit::<#{child_ctx.mode}>()
 	})
 }
 
@@ -99,7 +99,12 @@ fn gen_expected_atom(
 		Atom::Matcher(matcher) => {
 			chunk!(stream, <_ as __Matcher<#{matched_type}>>::expected(&#matcher))
 		}
-		Atom::Group(expr) => gen_expected(stream, expr, fuel, matched_type),
+		Atom::Group(expr) => {
+			let Some(expr) = locate_expected(expr) else {
+				return chunk!(stream, __Expected::None);
+			};
+			gen_expected(stream, expr, fuel, matched_type)
+		}
 		Atom::Call { .. } => chunk!(stream, __Expected::None),
 	}
 }
@@ -108,11 +113,28 @@ fn gen_expected_or(
 	stream: &mut TokenStream, exprs: &[Expr], fuel: u8,
 	matched_type: Option<&TokenStream>,
 ) {
+	let exprs = exprs.iter().filter_map(locate_expected).collect::<Vec<_>>();
+	if exprs.is_empty() {
+		return chunk!(stream, __Expected::None);
+	}
 	chunk!(stream, __::expected_or(
 		&[#for expr in exprs #{
 			#do { gen_expected(stream, expr, fuel - 1, matched_type) },
 		}]
 	));
+}
+
+fn locate_expected(expr: &Expr) -> Option<&Expr> {
+	match expr {
+		Expr::Unit { rep, .. } if rep.0 == 0 => None,
+		Expr::Unit { not: false, atom: Atom::Group(expr), .. } => locate_expected(expr),
+		Expr::And(exprs) => locate_expected(&exprs[0]),
+		Expr::Seq(exprs) => exprs.iter().find_map(locate_expected),
+		Expr::Capture(cap) => locate_expected(&cap.expr),
+		Expr::Error => None,
+		Expr::Imply { .. } => None,
+		_ => Some(expr),
+	}
 }
 
 fn gen_expected(
@@ -132,13 +154,9 @@ fn gen_expected(
 		Expr::Range(left, right) => {
 			chunk!(stream, <_ as __Matcher<#{matched_type}>>::expected(&(#left..=#right)))
 		}
-		Expr::And(exprs) | Expr::Seq(exprs) => {
-			gen_expected(stream, &exprs[0], fuel, matched_type)
-		}
-		Expr::Imply { cond, .. } => gen_expected(stream, cond, fuel, matched_type),
-		Expr::Capture(cap) => gen_expected(stream, &cap.expr, fuel, matched_type),
-		Expr::Error => {}
-		Expr::Or(exprs) => gen_expected_or(stream, exprs, fuel, matched_type),
+		Expr::Or(exprs) if fuel > 1 => gen_expected_or(stream, exprs, fuel, matched_type),
+		Expr::Or(_) => chunk!(stream, __Expected::None),
+		_ => unreachable!(),
 	}
 }
 
@@ -332,7 +350,7 @@ fn gen_or(
 		*__off = __start;
 		break #{ctx.label} #if !ctx.mode.error #{ Err(()) } 
 		#else #{ #{ctx.mode}::err(|| __::error_or(
-			&[#for expr in exprs #{ 
+			&[#for expr in exprs.iter().filter_map(locate_expected) #{ 
 				#do { gen_expected(stream, expr, ctx.expected_fuel - 1, ctx.matched_type) },
 			}],
 			*__off != <_ as __MatchAble>::len(__value), __start
@@ -628,6 +646,17 @@ fn gen_match_root(
 	}
 }
 
+fn gen_matcher_impl_expected(
+	mut stream: &mut TokenStream, expr: &Expr, matched_type: &TokenStream,
+) {
+	match locate_expected(expr) {
+		Some(expr) => {
+			gen_expected(stream, expr, DEFAULT_EXPECTED_FUEL, Some(matched_type))
+		}
+		_ => chunk!(stream, __Expected::None),
+	}
+}
+
 fn gen_matcher_impl(
 	mut stream: &mut TokenStream, matcher_ident: &Ident, expr: &Expr,
 	matched_type: &TokenStream, args: &[&Ident],
@@ -652,7 +681,7 @@ fn gen_matcher_impl(
 			}
 			fn expected(&self) -> __Expected {
 				#do { prologue(stream, false) }
-				#do { gen_expected(stream, &cap.expr, DEFAULT_EXPECTED_FUEL, Some(matched_type)) }
+				#do { gen_matcher_impl_expected(stream, expr, &matched_type) }
 			}
 		}
 	);

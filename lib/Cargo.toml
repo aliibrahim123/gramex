@@ -15,7 +15,7 @@ doctest = false
 default = ["std"]
 std = []
 str = []
-bin = []
+bytes = []
 
 
 [dependencies]

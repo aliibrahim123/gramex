@@ -8,13 +8,14 @@ use crate::{
 };
 
 #[allow(nonstandard_style)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct end;
 impl<T: MatchAble + ?Sized> Matcher<T> for end {
 	type Capture<'src>
 		= ()
 	where
 		T: 'src;
+	#[inline]
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<(), M> {
@@ -26,15 +27,18 @@ impl<T: MatchAble + ?Sized> Matcher<T> for end {
 	}
 }
 
+#[inline]
 pub fn atomic<T: MatchAble + ?Sized, U: Matcher<T>>(matcher: U) -> Atomic<U> {
 	Atomic(matcher)
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Atomic<U>(U);
 impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Atomic<U> {
 	type Capture<'src>
 		= U::Capture<'src>
 	where
 		T: 'src;
+	#[inline]
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<U::Capture<'src>, M> {
@@ -50,6 +54,7 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Atomic<U> {
 	}
 }
 
+#[inline]
 pub fn a<T: MatchAble + ?Sized, F>(pred: F) -> A<T, F>
 where
 	F: for<'src> Fn(T::Token<'src>) -> bool,
@@ -71,6 +76,7 @@ where
 		= T::Token<'src>
 	where
 		T: 'src;
+	#[inline]
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<T::Token<'src>, M> {
@@ -86,6 +92,7 @@ where
 	}
 }
 
+#[inline]
 pub fn an<T: MatchAble + ?Sized, F>(n: usize, pred: F) -> An<T, F>
 where
 	F: for<'src> Fn(T::Slice<'src>) -> bool,
@@ -94,10 +101,10 @@ where
 	An { pred, n, __marker: PhantomData }
 }
 #[derive(Debug, Clone, Copy)]
-pub struct An<t: ?Sized, F> {
+pub struct An<T: ?Sized, F> {
 	pred: F,
 	n: usize,
-	__marker: PhantomData<fn(&t)>,
+	__marker: PhantomData<fn(&T)>,
 }
 impl<T: MatchAble + ?Sized, F> Matcher<T> for An<T, F>
 where
@@ -108,6 +115,7 @@ where
 		= T::Slice<'src>
 	where
 		T: 'src;
+	#[inline]
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<T::Slice<'src>, M> {
@@ -127,7 +135,7 @@ where
 pub fn expected(expected: impl Into<Expected>) -> FailExpected {
 	FailExpected(expected.into())
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FailExpected(Expected);
 impl<T: MatchAble + ?Sized> Matcher<T> for FailExpected {
 	type Capture<'src>
@@ -151,7 +159,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for FailExpected {
 pub fn fail_with(msg: impl Into<LeanString>) -> FailWith {
 	FailWith(msg.into())
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FailWith(LeanString);
 impl<T: MatchAble + ?Sized> Matcher<T> for FailWith {
 	type Capture<'src>
@@ -165,11 +173,13 @@ impl<T: MatchAble + ?Sized> Matcher<T> for FailWith {
 	}
 }
 
+#[inline]
 pub fn list<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>>(
 	item: Item, sep: Sep,
 ) -> List<Item, Sep> {
 	List(item, sep)
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct List<Item, Sep>(Item, Sep);
 impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
 	for List<Item, Sep>
@@ -199,6 +209,7 @@ impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
 	}
 }
 
+#[inline]
 pub fn delim_list<T, Start, Item, Sep, End>(
 	start: Start, item: Item, sep: Sep, _end: End,
 ) -> DelimList<Start, Item, Sep, End>
@@ -211,6 +222,7 @@ where
 {
 	DelimList(start, item, sep, _end)
 }
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DelimList<Start, Item, Sep, End>(Start, Item, Sep, End);
 impl<
 	T: MatchAble + ?Sized,
@@ -239,7 +251,7 @@ impl<
 				items.push(M::unwrap_success(item));
 			}
 			if !atomic(sep).test(matched, off) {
-				end.do_match::<M::WithoutCapture>(matched, off)?;
+				_end.do_match::<M::WithoutCapture>(matched, off)?;
 				break;
 			}
 		}

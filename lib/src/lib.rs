@@ -6,6 +6,8 @@ extern crate alloc as alloc_crate;
 extern crate std as alloc_crate;
 
 pub use gramex_macro::*;
+#[cfg(feature = "bytes")]
+pub mod bytes;
 mod core;
 pub mod general;
 pub mod result;
