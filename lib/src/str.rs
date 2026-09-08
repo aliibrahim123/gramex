@@ -1,4 +1,4 @@
-use alloc_crate::{borrow::Cow, boxed::Box, rc::Rc, string::String, sync::Arc};
+use alloc_crate::{borrow::Cow, string::String};
 use core::{
 	fmt::{Display, Write},
 	ops::{Range, RangeInclusive},
@@ -7,6 +7,7 @@ use lean_string::LeanString;
 
 use crate::{
 	MatchAble, Matcher, Mode,
+	core::{define_ref_matcher, define_token_matcher, match_token},
 	result::{Expected, MatchError, MatchResult},
 };
 
@@ -71,77 +72,53 @@ macro_rules! define_matcher {
 	};
 }
 
+impl Matcher<str> for str {
+	type Capture<'src> = &'src str;
+	fn do_match<'src, M: Mode>(
+		&self, matched: &'src str, off: &mut usize,
+	) -> MatchResult<Self::Capture<'src>, M> {
+		if matched[*off..].starts_with(self) {
+			*off += self.len();
+			Ok(M::wrap_success(&matched[*off - self.len()..*off]))
+		} else if *off + self.len() > matched.len() {
+			*off = matched.len();
+			M::err(|| MatchError::incomplete(self.expected(), *off))
+		} else {
+			M::err(|| MatchError::mismatch(self.expected(), *off))
+		}
+	}
+	fn expected(&self) -> Expected {
+		Expected::A(wrap_with_quotes(self))
+	}
+}
+
 fn wrap_with_quotes(a: impl Display) -> LeanString {
 	let mut str = LeanString::new();
 	write!(str, "\"{a}\"").unwrap();
 	str
 }
 
-define_matcher!(
-	str,
-	|matcher, rem| (rem.starts_with(matcher), matcher.len()),
+define_token_matcher!(char, str, |matcher, char| (
+	(char == *matcher).then_some(matcher.len_utf8()),
 	Expected::A(wrap_with_quotes(matcher))
-);
+));
 
-define_matcher!(
-	char,
-	|matcher, rem| (rem.starts_with(*matcher), matcher.len_utf8()),
-	Expected::A(wrap_with_quotes(matcher))
-);
+define_ref_matcher!(String, for str);
+define_ref_matcher!(#for('b) Cow<'b, str>, for str);
 
-macro_rules! impl_ref {
-	[$($(#for <$life:lifetime>)? $T:ty),+] => {
-		$(impl$(<$life>)? Matcher<str> for $T {
-			type Capture<'src> = &'src str;
-			#[inline]
-			fn do_match<'src, M: Mode>(
-				&self, matched: &'src str, off: &mut usize,
-			) -> MatchResult<Self::Capture<'src>, M> {
-				AsRef::<str>::as_ref(self).do_match::<M>(matched, off)
-			}
-			fn expected(&self) -> Expected {
-				AsRef::<str>::as_ref(self).expected()
-			}
-		})+
-	};
-}
-impl_ref![String, #for<'b> Cow<'b, str>];
-
-define_matcher!(
-	RangeInclusive<char>,
-	|matcher, rem| match rem.chars().next() {
-		Some(c) => (matcher.contains(&c), c.len_utf8()),
-		_ => (false, 0),
-	},
+define_token_matcher!(RangeInclusive<char>, str, |matcher, char| (
+	matcher.contains(&char).then_some(char.len_utf8()),
 	Expected::Between(wrap_with_quotes(matcher.start()), wrap_with_quotes(matcher.end()),)
-);
+));
 
 macro_rules! define_pattern_matcher {
 	($name:ident, |$char:ident| $logic:expr, $kind:literal) => {
 		#[allow(nonstandard_style)]
 		pub struct $name;
-		impl Matcher<str> for $name {
-			type Capture<'src> = char;
-			fn do_match<'src, M: Mode>(
-				&self, matched: &'src str, off: &mut usize,
-			) -> MatchResult<char, M> {
-				let Some($char) = matched.get_token(*off) else {
-					return M::err(|| {
-						MatchError::incomplete(self.expected(), matched.len())
-					});
-				};
-				let res = $logic;
-				if res {
-					*off += $char.len_utf8();
-					Ok(M::wrap_success($char))
-				} else {
-					M::err(|| MatchError::mismatch(self.expected(), *off))
-				}
-			}
-			fn expected(&self) -> Expected {
-				Expected::A(LeanString::from_static_str($kind))
-			}
-		}
+		define_token_matcher!($name, str, |_matcher, $char| (
+			$logic.then_some($char.len_utf8()),
+			Expected::A(LeanString::from_static_str($kind))
+		));
 	};
 }
 
@@ -222,22 +199,13 @@ pub fn digit(radix: u8) -> Digit {
 }
 pub struct Digit(u8);
 impl Matcher<str> for Digit {
-	type Capture<'src>
-		= char
-	where
-		str: 'src;
+	type Capture<'src> = &'src str;
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src str, off: &mut usize,
-	) -> MatchResult<char, M> {
-		let Some(char) = matched.get_token(*off) else {
-			return M::err(|| MatchError::incomplete(self.expected(), *off));
-		};
-		if char.is_digit(self.0 as u32) {
-			*off += char.len_utf8();
-			Ok(M::wrap_success(char))
-		} else {
-			M::err(|| MatchError::mismatch(self.expected(), *off))
-		}
+	) -> MatchResult<&'src str, M> {
+		let matcher =
+			|char: char| char.is_digit(self.0 as u32).then_some(char.len_utf8());
+		match_token::<M, _>(matched, off, matcher, || self.expected())
 	}
 	fn expected(&self) -> Expected {
 		let mut buf = LeanString::new();

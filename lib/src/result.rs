@@ -81,14 +81,14 @@ impl MatchError {
 impl Display for MatchError {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		let Self { kind, off } = self;
-		let (kind, expected) = match kind {
-			MatchErrorKind::MisMatch(expected) => ("mismatch", expected),
-			MatchErrorKind::InComplete(expected) => ("incomplete", expected),
-			MatchErrorKind::Excess => ("excess input", &Expected::None),
-			MatchErrorKind::Other(msg) => (msg.as_ref(), &Expected::None),
+		use MatchErrorKind::*;
+		match kind {
+			MisMatch(_) => write!(f, "mismatch at {off}")?,
+			InComplete(_) => write!(f, "incomplete input at {off}")?,
+			Excess => write!(f, "excess input at {off}")?,
+			Other(msg) => f.write_str(msg)?,
 		};
-		write!(f, "{kind} at {off}")?;
-		if *expected != Expected::None {
+		if let MisMatch(expected) | InComplete(expected) = kind {
 			write!(f, ", expected {expected}")?;
 		}
 		Ok(())
