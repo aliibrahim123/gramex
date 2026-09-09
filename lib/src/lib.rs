@@ -11,6 +11,7 @@ pub mod bits;
 #[cfg(feature = "bytes")]
 pub mod bytes;
 mod core;
+pub mod cursor;
 pub mod general;
 pub mod result;
 #[cfg(feature = "str")]

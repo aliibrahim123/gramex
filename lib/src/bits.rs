@@ -392,7 +392,9 @@ macro_rules! impl_matching {
 				)
 			}
 			fn expected(&self) -> Expected {
-				Expected::None
+				let mut str = LeanString::new();
+				write!(str, "a {}-bit value", self.len).unwrap();
+				Expected::A(str)
 			}
 		}
 	};

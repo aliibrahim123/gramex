@@ -669,7 +669,7 @@ fn gen_matcher_impl(
 	chunk!(stream,
 		# #[allow(nonstandard_style, unused_imports, )]
 		impl<#for arg in args #{ #arg: __Matcher<#matched_type>, }>
-			__Matcher<#matched_type> for #matcher_ident<#for arg in args #{ #arg }>
+			__Matcher<#matched_type> for #matcher_ident<#for arg in args #{ #arg, }>
 		{
 			type Capture<'src> = #capture;
 			fn do_match<'src, __M: __Mode>(
@@ -699,7 +699,7 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 		} #else #{
 			pub fn #{&term.name}<#for arg in &args_t #{
 				#arg: __Matcher<#matched_type>,
-			}>(#for arg in &args #{ #arg: #{pascal_case(arg)} })
+			}>(#for arg in &args #{ #arg: #{pascal_case(arg)}, })
 				-> #matcher_ident<#for arg in &args_t #{ #arg, }>
 			{
 				#matcher_ident(#for arg in &args #{ #arg, })
@@ -713,7 +713,7 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 			<#for arg in &args #{
 				#arg: __Matcher<#matched_type>,
 			}>
-			(#for arg in &args #{ #arg })
+			(#for arg in &args #{ #arg, })
 		};
 		#do { gen_matcher_impl(stream, &matcher_ident, &term.expr, matched_type, &args,
 			|mut stream, in_matcher| chunk!(stream,
