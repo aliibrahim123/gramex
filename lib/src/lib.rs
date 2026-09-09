@@ -5,7 +5,7 @@ extern crate alloc as alloc_crate;
 #[cfg(feature = "std")]
 extern crate std as alloc_crate;
 
-pub use gramex_macro::*;
+pub use gramex_macro::{check, gramex, matcher, matches, parse, try_match};
 #[cfg(feature = "bits")]
 pub mod bits;
 #[cfg(feature = "bytes")]

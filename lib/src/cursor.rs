@@ -9,6 +9,8 @@ use crate::{
 	result::{Expected, MatchError, MatchResult},
 };
 
+pub use gramex_macro::{eat, match_map, test, try_eat};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SimpleSpan<T = usize> {
 	pub start: T,

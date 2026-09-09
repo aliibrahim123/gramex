@@ -71,6 +71,13 @@ pub struct Context<'src> {
 	pub matched_type: Option<&'src TokenStream>,
 	pub errors: &'src mut Vec<Error>,
 }
+impl<'src> Context<'src> {
+	pub fn new_expr(
+		matched_type: Option<&'src TokenStream>, errors: &'src mut Vec<Error>,
+	) -> Context<'src> {
+		Self { capture_mod: None, matched_type, errors }
+	}
+}
 
 fn resolve_captures(
 	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context<'_>,

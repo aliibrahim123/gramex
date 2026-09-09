@@ -66,6 +66,16 @@ struct Context<'a> {
 	matched_type: Option<&'a TokenStream>,
 }
 impl Context<'_> {
+	fn new<'a>(
+		count: &'a Cell<u64>, mode: Mode, matched_type: Option<&'a TokenStream>,
+	) -> Context<'a> {
+		Context {
+			label: BlockLable(count, 0),
+			mode,
+			expected_fuel: DEFAULT_EXPECTED_FUEL,
+			matched_type,
+		}
+	}
 	fn next_label(&self) -> Context {
 		Context { label: self.label.next(), ..*self }
 	}
@@ -617,12 +627,7 @@ fn gen_match_root(
 	matched_type: Option<&TokenStream>,
 ) {
 	let count = Cell::new(0);
-	let ctx = Context {
-		label: BlockLable(&count, 0),
-		mode,
-		expected_fuel: DEFAULT_EXPECTED_FUEL,
-		matched_type,
-	};
+	let ctx = Context::new(&count, mode, matched_type);
 	if mode.capture {
 		let Expr::Capture(cap) = &expr else { unreachable!() };
 		let container =
@@ -643,7 +648,7 @@ fn gen_match_root(
 }
 
 fn gen_matcher_impl_expected(
-	mut stream: &mut TokenStream, expr: &Expr, matched_type: &TokenStream,
+	stream: &mut TokenStream, expr: &Expr, matched_type: &TokenStream,
 ) {
 	match locate_expected(expr) {
 		Some(expr) => {
@@ -738,20 +743,25 @@ pub fn gen_matcher(mut stream: &mut TokenStream, matcher: &Matcher) {
 	)
 }
 
+fn gen_import_modes(stream: &mut TokenStream, capture: bool, error: bool) {
+	match (capture, error) {
+		(true, false) => chunk!(stream, use ::gramex::modes::Capture as __Capture;),
+		(false, true) => chunk!(stream, use ::gramex::modes::Check as __Check;),
+		(true, true) => chunk!(
+			stream,
+			use ::gramex::modes::{Capture as __Capture, Check as __Check, Parse as __Parse};
+		),
+		_ => {}
+	}
+}
+
 pub fn gen_match_expr(
 	mut stream: &mut TokenStream, capture: bool, error: bool, value: &TokenStream,
 	expr: &Expr,
 ) {
 	let mode = Mode { is_concrete: true, capture, error };
+	gen_import_modes(stream, capture, error);
 	chunk!(stream,
-		#match (capture, error) {
-			(true, false) => # { use ::gramex::modes::Capture as __Capture; }
-			(false, true) => # { use ::gramex::modes::Check as __Check; }
-			(true, true) => # { use ::gramex::modes::{
-				Capture as __Capture, Check as __Check, Parse as __Parse
-			}; }
-			_ => {}
-		}
 		let __value = #value;
 		let __value = __value.__as_matchable();
 		let __off = &mut 0;
@@ -765,4 +775,63 @@ pub fn gen_match_expr(
 			_ => {}
 		}
 	)
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum CursorOp {
+	Eat,
+	TryEat,
+	Test,
+}
+
+pub fn gen_cursor_match(
+	mut stream: &mut TokenStream, op: CursorOp, cur: &TokenStream, expr: &Expr,
+) {
+	let (capture, error) = match op {
+		CursorOp::Eat => (true, true),
+		CursorOp::TryEat => (true, false),
+		CursorOp::Test => (false, false),
+	};
+	gen_import_modes(stream, capture, error);
+	chunk!(stream,
+		let __cur = #cur;
+		let __value = __cur.input();
+		let __off = #if op == CursorOp::Eat #{ __cur.off_mut() }
+					#else #{ &mut __cur.off() };
+		#do { gen_match_root(
+			stream, expr, Mode { is_concrete: true, capture, error }, None
+		) }
+		#match op {
+			CursorOp::Eat => #{ res },
+			CursorOp::TryEat => #{ match res {
+				Ok(val) => { *__cur.off_mut() = *__off; Some(val) },
+				Err(_) => None,
+			} },
+			CursorOp::Test => #{ res.is_ok() },
+		}
+	)
+}
+
+pub fn gen_match_map(
+	mut stream: &mut TokenStream, cursor: &TokenStream, arms: &[Expr],
+	_else: &TokenStream,
+) {
+	let count = Cell::new(1);
+	let mode = Mode { is_concrete: true, capture: true, error: false };
+	let ctx = Context::new(&count, mode, None);
+	chunk!(stream,
+		use ::gramex::modes::Capture as __Capture;
+		let __cur = #cursor;
+		let __value = __cur.input();
+		let __off = __cur.off_mut();
+		let __start = *__off;
+		let mut __cap__root = None;
+		#for arm in arms #{
+			if let Ok(_) = #do { gen_expr_inline(stream, arm, &ctx) } {
+				break 'mat_0 __cap__root.unwrap()
+			}
+			*__off = __start;
+		}
+		#_else
+	);
 }

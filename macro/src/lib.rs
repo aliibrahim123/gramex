@@ -6,9 +6,13 @@ use proc_macro2::{Span, TokenStream};
 use crate::{
 	capture::{CapMod, analyze_expr, analyze_matcher, analyze_term, forbid_captures},
 	cursor::{Cursor, ident},
-	generate::{gen_imports, gen_match_expr, gen_matcher, gen_term},
+	generate::{
+		CursorOp, gen_cursor_match, gen_imports, gen_match_expr, gen_match_map,
+		gen_matcher, gen_term,
+	},
 	parse::{
-		Capture, Expr, MatchExpr, parse_grammer_decl, parse_match_expr, parse_matcher,
+		Capture, Expr, MatchExpr, MatchMap, parse_grammer_decl, parse_match_expr,
+		parse_match_map, parse_matcher,
 	},
 };
 
@@ -56,8 +60,7 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let mut errors = Vec::new();
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
 	let mut matcher = parse_matcher(&mut cur, false);
-	let mut ctx =
-		capture::Context { capture_mod: None, errors: &mut errors, matched_type: None };
+	let mut ctx = capture::Context::new_expr(None, &mut errors);
 	analyze_matcher(&mut matcher, &mut ctx);
 
 	quote! { {
@@ -71,7 +74,8 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 	let mut errors = Vec::new();
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
-	let Some(MatchExpr { matched_type, value, mut expr }) = parse_match_expr(&mut cur)
+	let Some(MatchExpr { matched_type, value, mut expr }) =
+		parse_match_expr(&mut cur, true)
 	else {
 		return quote! {{
 			#for e in errors #{#e}
@@ -79,11 +83,7 @@ fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 		}};
 	};
 
-	let mut ctx = capture::Context {
-		capture_mod: None,
-		errors: &mut errors,
-		matched_type: matched_type.as_ref(),
-	};
+	let mut ctx = capture::Context::new_expr(matched_type.as_ref(), &mut errors);
 	if capture {
 		let cap = Capture { ident: ident!("root"), expr, ..Default::default() };
 		expr = Expr::Capture(Box::new(cap));
@@ -113,4 +113,70 @@ pub fn try_match(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 #[proc_macro]
 pub fn parse(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	match_expr(input.into(), true, true).into()
+}
+
+fn cur_op(input: TokenStream, op: CursorOp) -> TokenStream {
+	let mut errors = Vec::new();
+	let mut cur = Cursor::new(input, Span::call_site(), &mut errors);
+	let Some(MatchExpr { value, mut expr, .. }) = parse_match_expr(&mut cur, false)
+	else {
+		return quote! {{
+			#for e in errors #{#e}
+			unreachable!()
+		}}
+		.into();
+	};
+
+	if op == CursorOp::Test {
+		forbid_captures(&expr, &mut errors);
+	} else {
+		let mut ctx = capture::Context::new_expr(None, &mut errors);
+		let cap = Capture { ident: ident!("root"), expr, ..Default::default() };
+		expr = Expr::Capture(Box::new(cap));
+		analyze_expr(&mut expr, false, &mut ctx);
+	}
+
+	quote! { {
+		#for e in errors #{#e}
+		#do { gen_imports(__stream) }
+		#do { gen_cursor_match(__stream, op, &value, &expr) }
+	} }
+}
+
+#[proc_macro]
+pub fn eat(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	cur_op(input.into(), CursorOp::Eat).into()
+}
+#[proc_macro]
+pub fn try_eat(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	cur_op(input.into(), CursorOp::TryEat).into()
+}
+#[proc_macro]
+pub fn test(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	cur_op(input.into(), CursorOp::Test).into()
+}
+
+#[proc_macro]
+pub fn match_map(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+	let mut errors = Vec::new();
+	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
+	let Some(MatchMap { cursor, mut arms, _else }) = parse_match_map(&mut cur) else {
+		return quote! {{
+			#for e in errors #{#e}
+			unreachable!()
+		}}
+		.into();
+	};
+
+	for arm in &mut arms {
+		let mut ctx = capture::Context::new_expr(None, &mut errors);
+		analyze_expr(arm, false, &mut ctx);
+	}
+
+	quote! { 'mat_0: {
+		#for e in errors #{#e}
+		#do { gen_imports(__stream) }
+		#do { gen_match_map(__stream, &cursor, &arms, &_else) }
+	} }
+	.into()
 }

@@ -511,8 +511,8 @@ pub struct MatchExpr {
 	pub expr: Expr,
 }
 
-pub fn parse_match_expr(cur: &mut Cursor) -> Option<MatchExpr> {
-	let matched_type = match cur.try_kw("for") {
+pub fn parse_match_expr(cur: &mut Cursor, matched_type_spec: bool) -> Option<MatchExpr> {
+	let matched_type = match matched_type_spec && cur.try_kw("for") {
 		true => {
 			let ty = cur.eat_until("a type", |cur| cur.test_punct(','));
 			cur.punct(',');
@@ -527,4 +527,46 @@ pub fn parse_match_expr(cur: &mut Cursor) -> Option<MatchExpr> {
 		cur.expected("end of input");
 	}
 	Some(MatchExpr { matched_type, value, expr })
+}
+
+#[derive(Debug)]
+pub struct MatchMap {
+	pub cursor: TokenStream,
+	pub arms: Vec<Expr>,
+	pub _else: TokenStream,
+}
+
+pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
+	let cursor = cur.eat_until("an expression", |cur| cur.test_punct(','))?;
+	cur.punct(',');
+	let mut arms_cur = cur.enter_group(Delimiter::Brace)?;
+	let mut arms = Vec::new();
+	while !arms_cur.is_end() && !arms_cur.test_kw("else") {
+		let pat = parse_expr(&mut arms_cur);
+		arms_cur.multi_punct(['=', '>']);
+		let map = arms_cur.eat_until("an expression", |cur| cur.test_punct(','));
+		let cap = Capture { ident: ident!("root"), expr: pat, map, ..Default::default() };
+		arms.push(Expr::Capture(Box::new(cap)));
+
+		if !arms_cur.is_end() {
+			arms_cur.punct(',');
+		}
+	}
+
+	let _else = match arms_cur.try_kw("else") {
+		true => {
+			arms_cur.multi_punct(['=', '>']);
+			let res = arms_cur
+				.eat_until("an expression", |cur| cur.test_punct(','))
+				.unwrap_or_else(|| quote!(core::unreachable!()));
+			arms_cur.try_punct(',');
+			res
+		}
+		false => quote!(core::unreachable!()),
+	};
+
+	if !cur.is_end() {
+		cur.expected("end of input");
+	}
+	Some(MatchMap { cursor, arms, _else })
 }
