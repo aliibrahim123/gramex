@@ -34,42 +34,12 @@ impl MatchAble for str {
 		}
 		let mut chars = self[*off..].chars();
 		if chars.nth(n - 1).is_none() {
-			*off = self.len();
 			M::err(|| MatchError::incomplete(Expected::SomeThing, *off))
 		} else {
 			*off += self[*off..].len() - chars.as_str().len();
 			Ok(M::wrap_success(()))
 		}
 	}
-}
-
-macro_rules! define_matcher {
-	($ty:ty, |$matcher:ident, $rem:ident| $logic:expr, $expected:expr) => {
-		impl Matcher<str> for $ty {
-			type Capture<'src> = &'src str;
-			#[inline]
-			fn do_match<'src, M: Mode>(
-				&self, matched: &'src str, off: &mut usize,
-			) -> MatchResult<&'src str, M> {
-				let $rem = &matched[*off..];
-				let $matcher = self;
-				let (res, len) = $logic;
-				if res {
-					*off += len;
-					Ok(M::wrap_success(&$rem[..len]))
-				} else if len > $rem.len() {
-					*off = matched.len();
-					M::err(|| MatchError::incomplete(self.expected(), *off))
-				} else {
-					M::err(|| MatchError::mismatch(self.expected(), *off))
-				}
-			}
-			fn expected(&self) -> Expected {
-				let $matcher = self;
-				$expected
-			}
-		}
-	};
 }
 
 impl Matcher<str> for str {
@@ -81,7 +51,6 @@ impl Matcher<str> for str {
 			*off += self.len();
 			Ok(M::wrap_success(&matched[*off - self.len()..*off]))
 		} else if *off + self.len() > matched.len() {
-			*off = matched.len();
 			M::err(|| MatchError::incomplete(self.expected(), *off))
 		} else {
 			M::err(|| MatchError::mismatch(self.expected(), *off))

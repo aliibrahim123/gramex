@@ -16,12 +16,10 @@ pub trait MatchAble {
 	fn slice<'src>(&'src self, range: Range<usize>) -> Option<Self::Slice<'src>>;
 	fn get_token<'src>(&'src self, off: usize) -> Option<Self::Token<'src>>;
 	fn skip_n<M: Mode>(&self, off: &mut usize, n: usize) -> MatchResult<(), M> {
-		let len = self.len();
-		*off += n;
-		if *off > len {
-			*off = len;
-			M::err(|| MatchError::incomplete(Expected::SomeThing, len))
+		if *off + n > self.len() {
+			M::err(|| MatchError::incomplete(Expected::SomeThing, *off))
 		} else {
+			*off += n;
 			Ok(M::wrap_success(()))
 		}
 	}
@@ -239,7 +237,11 @@ fn match_no_excess<'src, T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
 ) -> MatchResult<U::Capture<'src>, M> {
 	let mut off = 0;
 	let res = matcher.do_match::<M>(value, &mut off);
-	if off == value.len() { res } else { M::err(|| MatchError::excess(off)) }
+	if off == value.len() || res.is_err() {
+		res
+	} else {
+		M::err(|| MatchError::excess(off))
+	}
 }
 pub fn matches<T: MatchAble + ?Sized>(value: &T, matcher: impl Matcher<T>) -> bool {
 	match_no_excess::<_, _, Test>(value, matcher).is_ok()
@@ -265,7 +267,6 @@ pub fn match_token<'src, M: Mode, T: MatchAble + ?Sized>(
 	expected: impl FnOnce() -> Expected,
 ) -> MatchResult<T::Slice<'src>, M> {
 	let Some(token) = value.get_token(*off) else {
-		*off = value.len();
 		return M::err(|| MatchError::incomplete(expected(), *off));
 	};
 	if let Some(len) = pred(token) {
@@ -280,7 +281,6 @@ pub fn match_slice<'src, M: Mode, T: MatchAble + ?Sized, C>(
 	pred: impl FnOnce(T::Slice<'src>) -> Option<C>, expected: impl FnOnce() -> Expected,
 ) -> MatchResult<C, M> {
 	let Some(slice) = value.slice(*off..*off + size) else {
-		*off = value.len();
 		return M::err(|| MatchError::incomplete(expected(), *off));
 	};
 	if let Some(res) = pred(slice) {
