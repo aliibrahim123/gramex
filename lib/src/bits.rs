@@ -1,6 +1,6 @@
 use core::{
 	fmt::{self, Binary, Formatter, Write},
-	ops::{Deref, Range, RangeInclusive},
+	ops::{Range, RangeInclusive},
 };
 
 use lean_string::LeanString;
@@ -16,12 +16,14 @@ pub struct Bits {
 	pub value: u64,
 	pub len: u8,
 }
+#[inline]
 pub fn b(len: u8, value: u64) -> Bits {
 	assert!(len <= 64 && len != 0);
 	assert!(value <= u64::MAX >> (64 - len));
 	Bits { value, len }
 }
 impl Bits {
+	#[inline]
 	fn len(&self) -> usize {
 		self.len as usize
 	}
@@ -36,12 +38,17 @@ macro_rules! int_conv {
 	[$($ty:ty $(as $as:ty)?),+] => {
 		$(
 			impl From<$ty> for Bits {
+				#[inline]
 				fn from(value: $ty) -> Self {
-					Self { value: value $(as $as)? as u64, len: (size_of::<$ty>() as u8) * 8 }
+					Self {
+						value: value $(as $as)? as u64,
+						len: (size_of::<$ty>() as u8) * 8
+					}
 				}
 			}
 			impl TryFrom<Bits> for $ty {
 				type Error = ();
+				#[inline]
 				fn try_from(bits: Bits) -> Result<Self, Self::Error> {
 					if bits.len as usize > size_of::<$ty>() * 8 {
 						return Err(());
@@ -52,36 +59,20 @@ macro_rules! int_conv {
 		)+
 	};
 }
-int_conv![u8, u16, u32, i8 as u8, i16 as u16, i32 as u32, usize, isize as usize];
-
-impl From<u64> for Bits {
-	fn from(value: u64) -> Self {
-		Self { value, len: 64 }
-	}
-}
-impl From<Bits> for u64 {
-	fn from(value: Bits) -> Self {
-		value.value
-	}
-}
-impl From<i64> for Bits {
-	fn from(value: i64) -> Self {
-		Self { value: value as u64, len: 64 }
-	}
-}
-impl From<Bits> for i64 {
-	fn from(value: Bits) -> Self {
-		value.value as i64
-	}
-}
+#[rustfmt::skip]
+int_conv![
+	u8, u16, u32, i8 as u8, i16 as u16, i32 as u32, usize, isize as usize
+];
 
 impl From<bool> for Bits {
+	#[inline]
 	fn from(value: bool) -> Self {
 		Self { value: value as u64, len: 1 }
 	}
 }
 impl TryFrom<Bits> for bool {
 	type Error = ();
+	#[inline]
 	fn try_from(bits: Bits) -> Result<Self, Self::Error> {
 		if bits.len != 1 {
 			return Err(());
@@ -94,12 +85,17 @@ macro_rules! float_conv {
 	[$($ty:ty),+] => {
 		$(
 			impl From<$ty> for Bits {
+				#[inline]
 				fn from(value: $ty) -> Self {
-					Self { value: value.to_bits() as u64, len: (size_of::<$ty>() as u8) * 8 }
+					Self {
+						value: value.to_bits() as u64,
+						len: (size_of::<$ty>() as u8) * 8
+					}
 				}
 			}
 			impl TryFrom<Bits> for $ty {
 				type Error = ();
+				#[inline]
 				fn try_from(bits: Bits) -> Result<Self, Self::Error> {
 					if bits.len as usize > size_of::<$ty>() * 8 {
 						return Err(());
@@ -113,6 +109,7 @@ macro_rules! float_conv {
 float_conv![f32, f64];
 
 impl<const N: usize> From<[u8; N]> for Bits {
+	#[inline]
 	fn from(value: [u8; N]) -> Self {
 		assert!(N <= 8);
 		let mut buf = [0u8; 8];
@@ -122,6 +119,7 @@ impl<const N: usize> From<[u8; N]> for Bits {
 }
 impl<const N: usize> TryFrom<Bits> for [u8; N] {
 	type Error = ();
+	#[inline]
 	fn try_from(bits: Bits) -> Result<Self, Self::Error> {
 		assert!(N <= 8);
 		if bits.len > (N * 8) as u8 {
@@ -156,25 +154,22 @@ pub struct LBits(pub Bits);
 pub struct BBits(pub Bits);
 
 impl LBits {
+	#[inline]
 	pub fn new(len: u8, value: u64) -> LBits {
 		LBits(b(len, value))
 	}
-	fn len(&self) -> usize {
-		self.0.len as usize
-	}
 }
 impl BBits {
+	#[inline]
 	pub fn new(len: u8, value: u64) -> BBits {
 		BBits(b(len, value))
-	}
-	fn len(&self) -> usize {
-		self.0.len as usize
 	}
 }
 
 macro_rules! impl_from {
 	[$($from:ident -> $to:ident: $value:ident => $logic:expr),+] => {
 		$(impl From<$from> for $to {
+			#[inline]
 			fn from($value: $from) -> Self {
 				$logic
 			}
@@ -189,6 +184,10 @@ impl_from![
 	LBits -> BBits: value => BBits(value.0),
 	BBits -> LBits: value => LBits(value.0),
 
+	u64 -> Bits: value => Bits { value, len: 64 },
+	Bits -> u64: value => value.value,
+	i64 -> Bits: value => Bits { value: value as u64, len: 64 },
+	Bits -> i64: value => value.value as i64,
 	u64 -> LBits: value => LBits(Bits::from(value)),
 	u64 -> BBits: value => BBits(Bits::from(value)),
 	LBits -> u64: value => value.0.value,
@@ -204,23 +203,27 @@ macro_rules! steal_bits_from {
 	[$($(#for ($($args:tt)+))? $ty:ty),+] => {
 		$(
 			impl $(<$($args)+>)? From<$ty> for LBits {
+				#[inline]
 				fn from(value: $ty) -> Self {
 					Self(Bits::from(value))
 				}
 			}
 			impl $(<$($args)+>)? From<$ty> for BBits {
+				#[inline]
 				fn from(value: $ty) -> Self {
 					Self(Bits::from(value))
 				}
 			}
 			impl $(<$($args)+>)? TryFrom<LBits> for $ty {
 				type Error = ();
+				#[inline]
 				fn try_from(value: LBits) -> Result<Self, Self::Error> {
 					<$ty>::try_from(value.0)
 				}
 			}
 			impl $(<$($args)+>)? TryFrom<BBits> for $ty {
 				type Error = ();
+				#[inline]
 				fn try_from(value: BBits) -> Result<Self, Self::Error> {
 					<$ty>::try_from(value.0)
 				}
@@ -250,6 +253,7 @@ impl TryFrom<&[u8]> for BBits {
 macro_rules! impl_partial_eq {
 	[$(($lhs:ident :$lhs_t:ty, $rhs:ident :$rhs_t:ty) => $logic:expr),+] => {
 		$(impl PartialEq<$rhs_t> for $lhs_t {
+			#[inline]
 			fn eq(&self, $rhs: &$rhs_t) -> bool {
 				let $lhs = self;
 				$logic
@@ -283,12 +287,14 @@ impl Binary for BBits {
 	}
 }
 
+#[inline]
 fn bit_extract_le(value: u64, start: u8, end: u8) -> u64 {
 	if start == end {
 		return 0;
 	}
 	(value >> start) & (u64::MAX >> (64 - (end - start)))
 }
+#[inline]
 fn bit_extract_be(value: u64, start: u8, end: u8, len: u8) -> u64 {
 	bit_extract_le(value, len - end, len - start)
 }
@@ -306,10 +312,12 @@ pub struct BitRange {
 	pub len: u8,
 }
 impl BitRange {
+	#[inline]
 	fn len(&self) -> usize {
 		self.len as usize
 	}
 }
+#[inline]
 pub fn br(len: u8, range: RangeInclusive<u64>) -> BitRange {
 	assert!(len <= 64);
 	assert!(*range.start() <= u64::MAX >> (64 - len));
@@ -321,6 +329,7 @@ macro_rules! into_bits_matchers {
 	($matchable:ident, [$($(#for ($($t:tt)+))? $ty:ty),+]) => {
 		$(impl $(<$($t)+>)? Matcher<$matchable> for $ty {
 			type Capture<'src> = $matchable;
+			#[inline]
 			fn do_match<'src, M: Mode>(
 				&self, matched: &'src $matchable, off: &mut usize,
 			) -> MatchResult<$matchable, M> {
@@ -339,9 +348,11 @@ macro_rules! impl_matching {
 			type Slice<'src> = $ty;
 			type Token<'src> = bool;
 
+			#[inline]
 			fn len(&self) -> usize {
 				self.0.len as usize
 			}
+			#[inline]
 			fn get_token<'src>(&'src self, off: usize) -> Option<bool> {
 				if off >= self.0.len as usize {
 					return None;
@@ -350,6 +361,7 @@ macro_rules! impl_matching {
 					self.0.value, off as u8, (off as u8) + 1, $(self.0.$len)?
 				) != 0)
 			}
+			#[inline]
 			fn slice<'src>(&'src self, range: Range<usize>) -> Option<$ty> {
 				if range.end > self.0.len as usize {
 					return None;
@@ -383,6 +395,7 @@ macro_rules! impl_matching {
 		));
 		impl<F: Fn(u64) -> bool> Matcher<$ty> for A<F> {
 			type Capture<'src> = $ty;
+			#[inline]
 			fn do_match<'src, M: Mode>(
 				&self, matched: &'src $ty, off: &mut usize,
 			) -> MatchResult<$ty, M> {

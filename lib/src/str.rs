@@ -50,10 +50,9 @@ impl Matcher<str> for str {
 		if matched[*off..].starts_with(self) {
 			*off += self.len();
 			Ok(M::wrap_success(&matched[*off - self.len()..*off]))
-		} else if *off + self.len() > matched.len() {
-			M::err(|| MatchError::incomplete(self.expected(), *off))
 		} else {
-			M::err(|| MatchError::mismatch(self.expected(), *off))
+			let is_incomplete = *off + self.len() > matched.len();
+			M::err(|| MatchError::expected(self.expected(), is_incomplete, *off))
 		}
 	}
 	fn expected(&self) -> Expected {

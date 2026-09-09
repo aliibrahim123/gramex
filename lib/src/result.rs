@@ -1,7 +1,7 @@
 use crate::Mode;
-use alloc_crate::{borrow::Cow, vec::Vec};
+use alloc_crate::vec::Vec;
 use core::{
-	fmt::{self, Debug, Display, Formatter, Write},
+	fmt::{self, Debug, Display, Formatter},
 	ops::Range,
 };
 use lean_string::LeanString;
@@ -21,14 +21,29 @@ impl From<&str> for Expected {
 		Self::A(value.into())
 	}
 }
+impl From<LeanString> for Expected {
+	fn from(value: LeanString) -> Self {
+		Self::A(value)
+	}
+}
 impl<const N: usize> From<[&str; N]> for Expected {
 	fn from(value: [&str; N]) -> Self {
 		Self::OneOf(value.into_iter().map(|s| s.into()).collect())
 	}
 }
+impl<const N: usize> From<[LeanString; N]> for Expected {
+	fn from(value: [LeanString; N]) -> Self {
+		Self::OneOf(Vec::from(value))
+	}
+}
 impl From<Range<&str>> for Expected {
 	fn from(value: Range<&str>) -> Self {
 		Self::Between(value.start.into(), value.end.into())
+	}
+}
+impl From<Range<LeanString>> for Expected {
+	fn from(value: Range<LeanString>) -> Self {
+		Self::Between(value.start, value.end)
 	}
 }
 impl Display for Expected {
@@ -69,6 +84,12 @@ impl MatchError {
 	}
 	pub fn incomplete(expected: Expected, off: usize) -> Self {
 		Self { kind: MatchErrorKind::InComplete(expected), off }
+	}
+	pub fn expected(expected: Expected, is_incomplete: bool, off: usize) -> Self {
+		match is_incomplete {
+			true => Self::incomplete(expected, off),
+			false => Self::mismatch(expected, off),
+		}
 	}
 	pub fn excess(off: usize) -> Self {
 		Self { kind: MatchErrorKind::Excess, off }

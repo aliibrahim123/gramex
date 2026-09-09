@@ -1,8 +1,8 @@
-use core::{marker::PhantomData, ops::Range};
+use core::ops::Range;
 
 use alloc_crate::{rc::Rc, sync::Arc};
 
-use crate::result::{Expected, IntoResult, MatchError, MatchResult};
+use crate::result::{Expected, MatchError, MatchResult};
 
 pub trait MatchAble {
 	type Token<'src>

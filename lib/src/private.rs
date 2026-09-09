@@ -3,7 +3,7 @@ pub use alloc_crate::{format, vec};
 pub use core::convert::{Infallible, Into};
 pub use core::marker::PhantomData;
 pub use core::option::Option;
-use lean_string::{LeanString, ToLeanString};
+use lean_string::ToLeanString;
 
 use crate::result::{Expected, MatchError, MatchResult};
 use crate::{MatchAble, Mode};
@@ -26,10 +26,7 @@ pub fn expected_not(expected: Expected) -> Expected {
 }
 pub fn error_not(expected: Expected, is_mismatch: bool, off: usize) -> MatchError {
 	let expected = expected_not(expected);
-	match is_mismatch {
-		true => MatchError::mismatch(expected, off),
-		false => MatchError::incomplete(expected, off),
-	}
+	MatchError::expected(expected, !is_mismatch, off)
 }
 pub fn expected_or(cases: &[Expected]) -> Expected {
 	let mut resolved = Vec::with_capacity(cases.len());
@@ -41,11 +38,7 @@ pub fn expected_or(cases: &[Expected]) -> Expected {
 	if resolved.len() > 0 { Expected::OneOf(resolved) } else { Expected::None }
 }
 pub fn error_or(cases: &[Expected], is_mismatch: bool, off: usize) -> MatchError {
-	let expected = expected_or(cases);
-	match is_mismatch {
-		true => MatchError::mismatch(expected, off),
-		false => MatchError::incomplete(expected, off),
-	}
+	MatchError::expected(expected_or(cases), !is_mismatch, off)
 }
 
 pub fn unwrap_result<T, E>(r: Result<T, E>) -> T {

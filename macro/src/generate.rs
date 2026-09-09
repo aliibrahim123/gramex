@@ -457,8 +457,6 @@ fn gen_capture_normal(
 				let __cap = __::Into::<#{&info.resolved_type}>::into(__cap);
 			}
 			#if let Some(map) = &cap.map #{
-				let start = __start;
-				let end = *__off;
 				let #{&cap.ident} = __cap;
 				let __cap = #map;
 			}
@@ -472,8 +470,6 @@ fn gen_capture_fielded_cap(
 ) {
 	match &info.kind {
 		CapKind::ReduceMap(fields) => chunk!(stream,
-			let start = __start;
-			let end = *__off;
 			#for field in fields #{
 				let #{&field.name} = #do {
 					gen_capture_unwrwap(stream, &field.name, field.container)

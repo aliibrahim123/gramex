@@ -27,6 +27,22 @@ impl<T: MatchAble + ?Sized> Matcher<T> for end {
 	}
 }
 
+#[allow(nonstandard_style)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct pos;
+impl<T: MatchAble + ?Sized> Matcher<T> for pos {
+	type Capture<'src>
+		= usize
+	where
+		T: 'src;
+	#[inline]
+	fn do_match<'src, M: Mode>(
+		&self, _: &'src T, off: &mut usize,
+	) -> MatchResult<usize, M> {
+		Ok(M::wrap_success(*off))
+	}
+}
+
 #[inline]
 pub fn atomic<T: MatchAble + ?Sized, U: Matcher<T>>(matcher: U) -> Atomic<U> {
 	Atomic(matcher)
@@ -145,11 +161,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for FailExpected {
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<(), M> {
-		if *off == matched.len() {
-			M::err(|| MatchError::incomplete(self.0.clone(), *off))
-		} else {
-			M::err(|| MatchError::mismatch(self.0.clone(), *off))
-		}
+		M::err(|| MatchError::expected(self.0.clone(), *off == matched.len(), *off))
 	}
 	fn expected(&self) -> Expected {
 		self.0.clone()
