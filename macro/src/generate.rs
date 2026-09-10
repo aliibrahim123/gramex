@@ -7,7 +7,7 @@ use quote::{ToTokens, quote};
 use crate::{
 	capture::{CapChild, CapContainer, CapInfo, CapKind, pascal_case},
 	cursor::ident,
-	parse::{Atom, Capture, Expr, Matcher, Rep, Term},
+	parse::{Atom, Capture, EnumMatcher, Expr, Matcher, Rep, Term, Variant},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -834,4 +834,51 @@ pub fn gen_match_map(
 		}
 		#_else
 	);
+}
+
+fn camel_case(ident: &Ident) -> Ident {
+	let orig = ident.to_string();
+	let mut res = String::with_capacity(orig.len());
+	for (ind, char) in orig.chars().enumerate() {
+		if char.is_ascii_uppercase() && ind > 0 {
+			res.push('_');
+		}
+		res.push(char.to_ascii_lowercase());
+	}
+	Ident::new(&res, ident.span())
+}
+
+pub fn gen_enum_matcher(mut stream: &mut TokenStream, matcher: &EnumMatcher) {
+	let EnumMatcher { name: _enum, matched_type, vars } = matcher;
+	for Variant { name, inner } in vars {
+		let camel_name = camel_case(name);
+		chunk!(stream,
+			# #[allow(nonstandard_style)]
+			pub struct #camel_name;
+			impl<'slice> ::gramex::Matcher<#matched_type> for #camel_name {
+				type Capture<'src> = #match inner {
+					Some(inner) => #{ &'src #inner },
+					None => #{ <#matched_type as ::gramex::MatchAble>::Token<'src> },
+				} where #matched_type: 'src;
+				fn do_match<'src, M: ::gramex::Mode>(
+					&self, value: &'src #matched_type, off: &mut usize,
+				) -> ::gramex::result::MatchResult<Self::Capture<'src>, M> {
+					let Some(token) = <_ as ::gramex::MatchAble>::get_token(value, *off)
+					else { return M::err(||
+						::gramex::result::MatchError::incomplete(self.expected(), *off)
+					); };
+					if let #_enum::#name
+						#if inner.is_some() #{ (inner) } #else #{ { .. } }
+					= token {
+						*off += 1;
+						Ok(M::wrap_success(
+							#if inner.is_some() #{ inner } #else #{ token }
+						))
+					} else { M::err(||
+						::gramex::result::MatchError::mismatch(self.expected(), *off)
+					)}
+				}
+			}
+		)
+	}
 }

@@ -539,7 +539,7 @@ pub struct MatchMap {
 pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
 	let cursor = cur.eat_until("an expression", |cur| cur.test_punct(','))?;
 	cur.punct(',');
-	let mut arms_cur = cur.enter_group(Delimiter::Brace)?;
+	let mut arms_cur = cur.enter_group(Brace)?;
 	let mut arms = Vec::new();
 	while !arms_cur.is_end() && !arms_cur.test_kw("else") {
 		let pat = parse_expr(&mut arms_cur);
@@ -569,4 +569,72 @@ pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
 		cur.expected("end of input");
 	}
 	Some(MatchMap { cursor, arms, _else })
+}
+
+#[derive(Debug)]
+pub struct EnumMatcher {
+	pub name: Ident,
+	pub matched_type: TokenStream,
+	pub vars: Vec<Variant>,
+}
+
+#[derive(Debug)]
+pub struct Variant {
+	pub name: Ident,
+	pub inner: Option<TokenStream>,
+}
+
+fn try_lonely_type(mut cur: Cursor) -> Option<TokenStream> {
+	let mut angle_count = 0;
+	while !(cur.test_punct(',') && angle_count == 0 || cur.is_end()) {
+		if cur.test_punct('<') {
+			angle_count += 1;
+		} else if cur.test_punct('>') {
+			angle_count -= 1;
+		}
+		cur.skip();
+	}
+	(cur.ind >= cur.tokens.len() - 1)
+		.then(|| cur.tokens[..cur.ind].iter().cloned().collect())
+}
+fn parse_enum_matcher_variants(cur: &mut Cursor) -> Option<Vec<Variant>> {
+	let mut vars_cur = cur.enter_group(Brace)?;
+	let mut vars = Vec::new();
+	while !vars_cur.is_end() {
+		let Some(name) = vars_cur.ident() else {
+			vars_cur.try_eat_until(|cur| cur.try_punct(','));
+			continue;
+		};
+		let inner = vars_cur.try_enter_group(Parenthesis).and_then(try_lonely_type);
+		vars_cur.try_eat_until(|cur| cur.try_punct(','));
+		vars.push(Variant { name, inner });
+	}
+	Some(vars)
+}
+pub fn parse_enum_matcher(
+	attr: TokenStream, item: TokenStream, errors: &mut Vec<Error>,
+) -> Option<EnumMatcher> {
+	let mut attr_cur = Cursor::new(attr, Span::call_site(), errors);
+	attr_cur.kw("for");
+	let matched_type = attr_cur.eat_until("a type", |_| false)?;
+
+	let mut item_cur = Cursor::new(item, Span::call_site(), errors);
+	while item_cur.try_punct('#') {
+		item_cur.skip()
+	}
+	if item_cur.try_kw("pub") {
+		item_cur.try_group(Parenthesis);
+	}
+
+	if item_cur.kw("enum").is_none() {
+		err!(item_cur, "`derive_enum_matcher` attribute can only be applied to enums");
+		return None;
+	}
+
+	let name = item_cur.ident()?;
+	if item_cur.try_punct('<') {
+		item_cur.try_eat_until(|cur| cur.try_punct('>'));
+	}
+	let vars = parse_enum_matcher_variants(&mut item_cur)?;
+	Some(EnumMatcher { name, matched_type, vars })
 }

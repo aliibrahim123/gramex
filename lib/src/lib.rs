@@ -12,6 +12,7 @@ pub mod bits;
 pub mod bytes;
 mod core;
 pub mod cursor;
+pub mod derive;
 pub mod general;
 pub mod result;
 #[cfg(feature = "str")]

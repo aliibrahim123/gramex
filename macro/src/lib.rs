@@ -7,12 +7,12 @@ use crate::{
 	capture::{CapMod, analyze_expr, analyze_matcher, analyze_term, forbid_captures},
 	cursor::{Cursor, ident},
 	generate::{
-		CursorOp, gen_cursor_match, gen_imports, gen_match_expr, gen_match_map,
-		gen_matcher, gen_term,
+		CursorOp, gen_cursor_match, gen_enum_matcher, gen_imports, gen_match_expr,
+		gen_match_map, gen_matcher, gen_term,
 	},
 	parse::{
-		Capture, Expr, MatchExpr, MatchMap, parse_grammer_decl, parse_match_expr,
-		parse_match_map, parse_matcher,
+		Capture, Expr, MatchExpr, MatchMap, parse_enum_matcher, parse_grammer_decl,
+		parse_match_expr, parse_match_map, parse_matcher,
 	},
 };
 
@@ -42,7 +42,7 @@ pub fn gramex(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	static CUR_ID: AtomicI32 = AtomicI32::new(0);
 	let id = CUR_ID.fetch_add(1, Ordering::Relaxed);
 	quote! {
-		#for e in errors #{#e}
+		#for err in errors #{ #err }
 		# #[doc(hidden)]
 		mod #{ident!("gram_def_{id}")} {
 			use super::*;
@@ -64,7 +64,7 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	analyze_matcher(&mut matcher, &mut ctx);
 
 	quote! { {
-		#for e in errors #{#e}
+		#for err in errors #{ #err }
 		#do { gen_imports(__stream) }
 		#do { gen_matcher(__stream, &matcher) }
 	} }
@@ -78,7 +78,7 @@ fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 		parse_match_expr(&mut cur, true)
 	else {
 		return quote! {{
-			#for e in errors #{#e}
+			#for err in errors #{ #err }
 			unreachable!()
 		}};
 	};
@@ -92,7 +92,7 @@ fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 		forbid_captures(&expr, &mut errors);
 	}
 	quote! { {
-		#for e in errors #{#e}
+		#for err in errors #{ #err }
 		#do { gen_imports(__stream) }
 		#do { gen_match_expr(__stream, capture, error, &value, &expr) }
 	} }
@@ -121,7 +121,7 @@ fn cur_op(input: TokenStream, op: CursorOp) -> TokenStream {
 	let Some(MatchExpr { value, mut expr, .. }) = parse_match_expr(&mut cur, false)
 	else {
 		return quote! {{
-			#for e in errors #{#e}
+			#for err in errors #{ #err }
 			unreachable!()
 		}}
 		.into();
@@ -137,7 +137,7 @@ fn cur_op(input: TokenStream, op: CursorOp) -> TokenStream {
 	}
 
 	quote! { {
-		#for e in errors #{#e}
+		#for err in errors #{ #err }
 		#do { gen_imports(__stream) }
 		#do { gen_cursor_match(__stream, op, &value, &expr) }
 	} }
@@ -162,7 +162,7 @@ pub fn match_map(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
 	let Some(MatchMap { cursor, mut arms, _else }) = parse_match_map(&mut cur) else {
 		return quote! {{
-			#for e in errors #{#e}
+			#for err in errors #{ #err }
 			unreachable!()
 		}}
 		.into();
@@ -174,9 +174,27 @@ pub fn match_map(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	}
 
 	quote! { 'mat_0: {
-		#for e in errors #{#e}
+		#for err in errors #{ #err }
 		#do { gen_imports(__stream) }
 		#do { gen_match_map(__stream, &cursor, &arms, &_else) }
 	} }
+	.into()
+}
+
+#[proc_macro_attribute]
+pub fn derive_enum_matcher(
+	attr: proc_macro::TokenStream, item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+	let mut errors = Vec::new();
+	let item = TokenStream::from(item);
+	let Some(matcher) = parse_enum_matcher(attr.into(), item.clone(), &mut errors) else {
+		return quote! { #for err in errors #{ #err } #item }.into();
+	};
+
+	quote! {
+		#for err in errors #{ #err }
+		#do { gen_enum_matcher(__stream, &matcher) }
+		#item
+	}
 	.into()
 }
