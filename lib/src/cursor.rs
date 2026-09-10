@@ -9,6 +9,7 @@ use crate::{
 	result::{Expected, MatchError, MatchResult},
 };
 
+#[cfg(feature = "macros")]
 pub use gramex_macro::{eat, match_map, test, try_eat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

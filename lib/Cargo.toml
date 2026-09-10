@@ -14,11 +14,12 @@ doctest = false
 [features]
 default = ["std"]
 std = []
+macros = ["dep:gramex-macro"]
 str = []
 bytes = []
 bits = []
 
 
 [dependencies]
-gramex-macro = { version = "0.1.0", path = "../macro" }
+gramex-macro = { version = "0.1.0", path = "../macro", optional = true }
 lean_string = "0.7.0"

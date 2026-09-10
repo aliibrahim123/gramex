@@ -178,4 +178,5 @@ macro_rules! derive_slice_matchable {
 #[doc(inline)]
 pub use derive_slice_matchable;
 
+#[cfg(feature = "macros")]
 pub use gramex_macro::derive_enum_matcher;
