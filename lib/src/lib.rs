@@ -1,4 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::match_bool)]
+#![allow(clippy::len_without_is_empty)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::return_self_not_must_use)]
+#![allow(clippy::enum_glob_use)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc as alloc_crate;

@@ -13,8 +13,8 @@ pub trait MatchAble {
 		Self: 'src;
 
 	fn len(&self) -> usize;
-	fn slice<'src>(&'src self, range: Range<usize>) -> Option<Self::Slice<'src>>;
-	fn get_token<'src>(&'src self, off: usize) -> Option<Self::Token<'src>>;
+	fn slice(&self, range: Range<usize>) -> Option<Self::Slice<'_>>;
+	fn get_token(&self, off: usize) -> Option<Self::Token<'_>>;
 	fn skip_n<M: Mode>(&self, off: &mut usize, n: usize) -> MatchResult<(), M> {
 		if *off + n > self.len() {
 			M::err(|| MatchError::incomplete(Expected::SomeThing, *off))
@@ -100,10 +100,10 @@ macro_rules! decl_mod {
 
 				#[inline]
 				$($cap_true fn wrap_success<T>(val: T) -> Self::Success<T> { val })?
-				$($cap_false fn wrap_success<T>(_val: T) -> Self::Success<T> { () })?
+				$($cap_false fn wrap_success<T>(_val: T) -> Self::Success<T> {  })?
 				#[inline]
 				$($err_true fn wrap_error(err: MatchError) -> Self::Error { err })?
-				$($err_false fn wrap_error(_err: MatchError) -> Self::Error { () })?
+				$($err_false fn wrap_error(_err: MatchError) -> Self::Error {  })?
 
 
 				$(#[inline] $cap_true fn unwrap_success<T>(val: Self::Success<T>) -> T { val })?
@@ -114,7 +114,7 @@ macro_rules! decl_mod {
 					-> Self::Success<U> { fun(val) }
 				)?
 				$($cap_false fn map<T, U>(_: Self::Success<T>, _: impl FnOnce(T) -> U)
-					-> Self::Success<U> { () }
+					-> Self::Success<U> {  }
 				)?
 			}
 		};
@@ -179,9 +179,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for () {
 		= ()
 	where
 		T: 'src;
-	fn do_match<'src, M: Mode>(
-		&self, _matched: &'src T, _off: &mut usize,
-	) -> MatchResult<(), M> {
+	fn do_match<M: Mode>(&self, _matched: &T, _off: &mut usize) -> MatchResult<(), M> {
 		Ok(M::wrap_success(()))
 	}
 }
@@ -221,20 +219,20 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Option<U> {
 	where
 		T: 'src;
 	fn do_match<'src, M: Mode>(
-		&self, matched: &'src T, off: &mut usize,
+		&self, value: &'src T, off: &mut usize,
 	) -> MatchResult<Option<U::Capture<'src>>, M> {
 		match self {
-			Some(matcher) => matcher
-				.do_match::<M>(matched, off)
-				.map(|suc| M::map(suc, |val| Some(val))),
+			Some(matcher) => {
+				matcher.do_match::<M>(value, off).map(|suc| M::map(suc, Some))
+			}
 			None => Ok(M::wrap_success(None)),
 		}
 	}
 }
 
-fn match_no_excess<'src, T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
-	value: &'src T, matcher: U,
-) -> MatchResult<U::Capture<'src>, M> {
+fn match_no_excess<T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
+	value: &T, matcher: U,
+) -> MatchResult<U::Capture<'_>, M> {
 	let mut off = 0;
 	let res = matcher.do_match::<M>(value, &mut off);
 	if off == value.len() || res.is_err() {
@@ -251,13 +249,13 @@ pub fn check<T: MatchAble + ?Sized>(
 ) -> Result<(), MatchError> {
 	match_no_excess::<_, _, Check>(value, matcher)
 }
-pub fn try_match<'src, T: MatchAble + ?Sized, U: Matcher<T>>(
-	value: &'src T, matcher: U,
-) -> Option<U::Capture<'src>> {
+pub fn try_match<T: MatchAble + ?Sized, U: Matcher<T>>(
+	value: &T, matcher: U,
+) -> Option<U::Capture<'_>> {
 	match_no_excess::<_, _, Capture>(value, matcher).ok()
 }
-pub fn parse<'src, T: MatchAble + ?Sized, U: Matcher<T>>(
-	value: &'src T, matcher: U,
-) -> Result<U::Capture<'src>, MatchError> {
+pub fn parse<T: MatchAble + ?Sized, U: Matcher<T>>(
+	value: &T, matcher: U,
+) -> Result<U::Capture<'_>, MatchError> {
 	match_no_excess::<_, _, Parse>(value, matcher)
 }

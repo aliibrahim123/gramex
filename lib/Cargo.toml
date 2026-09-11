@@ -11,6 +11,10 @@ documentation = "https://docs.rs/gramex/"
 [lib]
 doctest = false
 
+
+[lints]
+clippy.pedantic = "warn"
+
 [features]
 default = ["std"]
 std = []

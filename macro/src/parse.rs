@@ -139,6 +139,7 @@ fn try_parse_path(cur: &mut Cursor) -> Option<Vec<TokenTree>> {
 	Some(segments)
 }
 
+#[allow(clippy::map_unwrap_or)]
 fn parse_rep_bracket(cur: &mut Cursor) -> Rep {
 	let min = cur.try_nb();
 	let rep = if cur.try_multi_punct(['.', '.']) {
@@ -224,8 +225,7 @@ fn parse_capture_type(cur: &mut Cursor) -> CapType {
 		CapType::Enum(cur.try_ident())
 	} else {
 		cur.eat_until("a type", |cur| cur.test_punct('='))
-			.map(CapType::Explicit)
-			.unwrap_or(CapType::Inherited)
+			.map_or(CapType::Inherited, CapType::Explicit)
 	}
 }
 
@@ -250,10 +250,10 @@ fn try_inline_capture(cur: &mut Cursor) -> Option<Expr> {
 }
 fn try_parse_capture(cur: &mut Cursor, flags_span: Option<Span>) -> Option<Expr> {
 	let start = cur.ind;
-	let Some(ident) = cur.try_ident() else { return None };
+	let ident = cur.try_ident()?;
 	let rep = parse_rep(cur);
 
-	if !cur.test_punct('=') && !(cur.test_punct(':') && !cur.test_multi_punct([':', ':']))
+	if !(cur.test_punct('=') || cur.test_punct(':') && !cur.test_multi_punct([':', ':']))
 	{
 		cur.rewind(start);
 		return None;
@@ -378,7 +378,7 @@ pub fn parse_expr(cur: &mut Cursor) -> Expr {
 
 /// matcher definition
 ///
-/// **grammer**: ("for" -> matched_type:type ':') expr ("=>" -> map:expr))
+/// **grammer**: ("for" -> `matched_type:type` ':') expr ("=>" -> map:expr))
 #[derive(Debug, Clone)]
 pub struct Matcher {
 	pub matched_type: Option<TokenStream>,
@@ -413,7 +413,7 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 		false => None,
 	};
 	if !inside_call && !cur.is_end() {
-		err!(cur, "expected end of input")
+		err!(cur, "expected end of input");
 	}
 
 	let ident = ident!("root");
@@ -426,8 +426,8 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 /// a term in gramex macro
 ///
 /// **grammer**: `
-/// 	optimize:term_optimize "let" ident ('<' -> args:list<ident, ','> '>') (':' -> type)
-/// 	'=' expr ("=>" -> map:expr)
+/// "let" ident ('<' -> args:list<ident, ','> '>') (':' -> type)
+/// '=' expr ("=>" -> map:expr)
 /// `
 #[derive(Debug, Clone)]
 pub struct Term {
@@ -451,7 +451,9 @@ fn parse_term_args(cur: &mut Cursor) -> Vec<Ident> {
 	let mut args = Vec::new();
 	if cur.try_punct('<') {
 		loop {
-			cur.ident().map(|arg| args.push(arg));
+			if let Some(arg) = cur.ident() {
+				args.push(arg);
+			}
 			cur.try_eat_until(|cur| cur.try_punct(',') || cur.test_punct('>'));
 			if cur.is_end() {
 				cur.expected("`>`");
@@ -498,7 +500,9 @@ pub fn parse_grammer_decl(cur: &mut Cursor) -> GrammarDecl {
 
 	let mut terms = Vec::new();
 	while !cur.is_end() {
-		try_parse_term(cur).map(|t| terms.push(t));
+		if let Some(t) = try_parse_term(cur) {
+			terms.push(t);
+		}
 	}
 	GrammarDecl { matched_type, terms }
 }
@@ -512,13 +516,12 @@ pub struct MatchExpr {
 }
 
 pub fn parse_match_expr(cur: &mut Cursor, matched_type_spec: bool) -> Option<MatchExpr> {
-	let matched_type = match matched_type_spec && cur.try_kw("for") {
-		true => {
-			let ty = cur.eat_until("a type", |cur| cur.test_punct(','));
-			cur.punct(',');
-			ty
-		}
-		false => None,
+	let matched_type = if matched_type_spec && cur.try_kw("for") {
+		let ty = cur.eat_until("a type", |cur| cur.test_punct(','));
+		cur.punct(',');
+		ty
+	} else {
+		None
 	};
 	let value = cur.eat_until("an expression", |cur| cur.test_punct(','))?;
 	cur.punct(',');
@@ -533,7 +536,7 @@ pub fn parse_match_expr(cur: &mut Cursor, matched_type_spec: bool) -> Option<Mat
 pub struct MatchMap {
 	pub cursor: TokenStream,
 	pub arms: Vec<Expr>,
-	pub _else: TokenStream,
+	pub else_: TokenStream,
 }
 
 pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
@@ -553,22 +556,21 @@ pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
 		}
 	}
 
-	let _else = match arms_cur.try_kw("else") {
-		true => {
-			arms_cur.multi_punct(['=', '>']);
-			let res = arms_cur
-				.eat_until("an expression", |cur| cur.test_punct(','))
-				.unwrap_or_else(|| quote!(core::unreachable!()));
-			arms_cur.try_punct(',');
-			res
-		}
-		false => quote!(core::unreachable!()),
+	let else_ = if arms_cur.try_kw("else") {
+		arms_cur.multi_punct(['=', '>']);
+		let res = arms_cur
+			.eat_until("an expression", |cur| cur.test_punct(','))
+			.unwrap_or_else(|| quote!(core::unreachable!()));
+		arms_cur.try_punct(',');
+		res
+	} else {
+		quote!(core::unreachable!())
 	};
 
 	if !cur.is_end() {
 		cur.expected("end of input");
 	}
-	Some(MatchMap { cursor, arms, _else })
+	Some(MatchMap { cursor, arms, else_ })
 }
 
 #[derive(Debug)]
@@ -620,7 +622,7 @@ pub fn parse_enum_matcher(
 
 	let mut item_cur = Cursor::new(item, Span::call_site(), errors);
 	while item_cur.try_punct('#') {
-		item_cur.skip()
+		item_cur.skip();
 	}
 	if item_cur.try_kw("pub") {
 		item_cur.try_group(Parenthesis);

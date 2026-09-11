@@ -28,7 +28,7 @@ impl From<LeanString> for Expected {
 }
 impl<const N: usize> From<[&str; N]> for Expected {
 	fn from(value: [&str; N]) -> Self {
-		Self::OneOf(value.into_iter().map(|s| s.into()).collect())
+		Self::OneOf(value.into_iter().map(Into::into).collect())
 	}
 }
 impl<const N: usize> From<[LeanString; N]> for Expected {
@@ -101,14 +101,14 @@ impl MatchError {
 
 impl Display for MatchError {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		let Self { kind, off } = self;
 		use MatchErrorKind::*;
+		let Self { kind, off } = self;
 		match kind {
 			MisMatch(_) => write!(f, "mismatch at {off}")?,
 			InComplete(_) => write!(f, "incomplete input at {off}")?,
 			Excess => write!(f, "excess input at {off}")?,
 			Other(msg) => f.write_str(msg)?,
-		};
+		}
 		if let MisMatch(expected) | InComplete(expected) = kind {
 			write!(f, ", expected {expected}")?;
 		}

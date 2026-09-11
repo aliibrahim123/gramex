@@ -18,13 +18,13 @@ impl<T: MatchAble + ?Sized> AsMatchAble for T {}
 pub fn error_any(off: usize) -> MatchError {
 	MatchError::incomplete(Expected::SomeThing, off)
 }
-pub fn expected_not(expected: Expected) -> Expected {
+pub fn expected_not(expected: &Expected) -> Expected {
 	match expected {
 		Expected::None => Expected::None,
 		_ => Expected::Not(expected.to_lean_string()),
 	}
 }
-pub fn error_not(expected: Expected, is_mismatch: bool, off: usize) -> MatchError {
+pub fn error_not(expected: &Expected, is_mismatch: bool, off: usize) -> MatchError {
 	let expected = expected_not(expected);
 	MatchError::expected(expected, !is_mismatch, off)
 }
@@ -35,8 +35,9 @@ pub fn expected_or(cases: &[Expected]) -> Expected {
 			resolved.push(case.to_lean_string());
 		}
 	}
-	if resolved.len() > 0 { Expected::OneOf(resolved) } else { Expected::None }
+	if resolved.is_empty() { Expected::None } else { Expected::OneOf(resolved) }
 }
+#[must_use]
 pub fn error_or(cases: &[Expected], is_mismatch: bool, off: usize) -> MatchError {
 	MatchError::expected(expected_or(cases), !is_mismatch, off)
 }

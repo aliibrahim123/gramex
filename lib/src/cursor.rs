@@ -56,8 +56,8 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for SpanAround<U> {
 		= SimpleSpan
 	where
 		T: 'src;
-	fn do_match<'src, M: Mode>(
-		&self, matched: &'src T, off: &mut usize,
+	fn do_match<M: Mode>(
+		&self, matched: &T, off: &mut usize,
 	) -> MatchResult<SimpleSpan, M> {
 		let start = *off;
 		self.0.do_match::<M>(matched, off)?;

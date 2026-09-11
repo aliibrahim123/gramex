@@ -1,3 +1,5 @@
+#![allow(clippy::match_bool)]
+#![allow(clippy::items_after_statements)]
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use chunked_quote::quote;
@@ -73,7 +75,7 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 fn match_expr(input: TokenStream, capture: bool, error: bool) -> TokenStream {
 	let mut errors = Vec::new();
-	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
+	let mut cur = Cursor::new(input, Span::call_site(), &mut errors);
 	let Some(MatchExpr { matched_type, value, mut expr }) =
 		parse_match_expr(&mut cur, true)
 	else {
@@ -123,8 +125,7 @@ fn cur_op(input: TokenStream, op: CursorOp) -> TokenStream {
 		return quote! {{
 			#for err in errors #{ #err }
 			unreachable!()
-		}}
-		.into();
+		}};
 	};
 
 	if op == CursorOp::Test {
@@ -160,7 +161,7 @@ pub fn test(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 pub fn match_map(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let mut errors = Vec::new();
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
-	let Some(MatchMap { cursor, mut arms, _else }) = parse_match_map(&mut cur) else {
+	let Some(MatchMap { cursor, mut arms, else_ }) = parse_match_map(&mut cur) else {
 		return quote! {{
 			#for err in errors #{ #err }
 			unreachable!()
@@ -176,7 +177,7 @@ pub fn match_map(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	quote! { 'mat_0: {
 		#for err in errors #{ #err }
 		#do { gen_imports(__stream) }
-		#do { gen_match_map(__stream, &cursor, &arms, &_else) }
+		#do { gen_match_map(__stream, &cursor, &arms, &else_) }
 	} }
 	.into()
 }

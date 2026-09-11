@@ -27,9 +27,9 @@ pub struct Cursor<'a> {
 	pub errors: &'a mut Vec<Error>,
 }
 impl Cursor<'_> {
-	pub fn new<'a>(
-		stream: TokenStream, end_span: Span, errors: &'a mut Vec<Error>,
-	) -> Cursor<'a> {
+	pub fn new(
+		stream: TokenStream, end_span: Span, errors: &mut Vec<Error>,
+	) -> Cursor<'_> {
 		Cursor { tokens: stream.into_iter().collect(), ind: 0, end_span, errors }
 	}
 	pub fn peek_next(&self, n: usize) -> Option<&TokenTree> {
@@ -57,7 +57,7 @@ impl Cursor<'_> {
 	}
 	/// sets the current index
 	pub fn rewind(&mut self, ind: usize) {
-		self.ind = ind
+		self.ind = ind;
 	}
 	pub fn expected(&mut self, expected: impl Display) {
 		err!(self, "expected {expected}");
@@ -103,6 +103,7 @@ impl Cursor<'_> {
 		self.test_multi_punct(chars).then(|| self.ind += N).is_some()
 	}
 	/// try eat multiple [`Punct`]s of specific characters
+	#[allow(clippy::needless_range_loop)]
 	pub fn test_multi_punct<const N: usize>(&self, chars: [char; N]) -> bool {
 		// head
 		for i in 0..N - 1 {
@@ -156,6 +157,7 @@ impl Cursor<'_> {
 		ident == kw
 	}
 	/// eat a [`Literal`]
+	#[allow(unused)]
 	pub fn literal(&mut self) -> Option<Literal> {
 		if let Some(lit) = self.try_literal() {
 			Some(lit)
@@ -171,6 +173,7 @@ impl Cursor<'_> {
 		self.skip();
 		Some(lit)
 	}
+	#[allow(unused)]
 	pub fn nb<T: FromStr>(&mut self) -> Option<T> {
 		if let Some(nb) = self.try_nb() {
 			Some(nb)
@@ -216,7 +219,7 @@ impl Cursor<'_> {
 		Some(Cursor::new(group.stream(), group.span_close(), self.errors))
 	}
 	/// try creates a [`Cursor`] for the stream of a [`Group`] of a specific [`Delimiter`]
-	pub fn try_enter_group(&mut self, delim: Delimiter) -> Option<Cursor> {
+	pub fn try_enter_group(&mut self, delim: Delimiter) -> Option<Cursor<'_>> {
 		let group = self.try_group(delim)?;
 		Some(Cursor::new(group.stream(), group.span_close(), self.errors))
 	}

@@ -11,6 +11,9 @@ documentation = "https://docs.rs/gramex/"
 [lib]
 proc-macro = true
 
+[lints]
+clippy.pedantic = "warn"
+
 [dependencies]
 proc-macro2 = "1.0.107"
 quote = "1.0.47"

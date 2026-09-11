@@ -16,9 +16,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for end {
 	where
 		T: 'src;
 	#[inline]
-	fn do_match<'src, M: Mode>(
-		&self, matched: &'src T, off: &mut usize,
-	) -> MatchResult<(), M> {
+	fn do_match<M: Mode>(&self, matched: &T, off: &mut usize) -> MatchResult<(), M> {
 		if *off == matched.len() {
 			Ok(M::wrap_success(()))
 		} else {
@@ -36,9 +34,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for pos {
 	where
 		T: 'src;
 	#[inline]
-	fn do_match<'src, M: Mode>(
-		&self, _: &'src T, off: &mut usize,
-	) -> MatchResult<usize, M> {
+	fn do_match<M: Mode>(&self, _: &T, off: &mut usize) -> MatchResult<usize, M> {
 		Ok(M::wrap_success(*off))
 	}
 }
@@ -158,9 +154,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for FailExpected {
 		= ()
 	where
 		T: 'src;
-	fn do_match<'src, M: Mode>(
-		&self, matched: &'src T, off: &mut usize,
-	) -> MatchResult<(), M> {
+	fn do_match<M: Mode>(&self, matched: &T, off: &mut usize) -> MatchResult<(), M> {
 		M::err(|| MatchError::expected(self.0.clone(), *off == matched.len(), *off))
 	}
 	fn expected(&self) -> Expected {
@@ -178,9 +172,7 @@ impl<T: MatchAble + ?Sized> Matcher<T> for FailWith {
 		= ()
 	where
 		T: 'src;
-	fn do_match<'src, M: Mode>(
-		&self, _matched: &'src T, off: &mut usize,
-	) -> MatchResult<(), M> {
+	fn do_match<M: Mode>(&self, _matched: &T, off: &mut usize) -> MatchResult<(), M> {
 		M::err(|| MatchError::other(self.0.clone(), *off))
 	}
 }
@@ -223,7 +215,7 @@ impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
 
 #[inline]
 pub fn delim_list<T, Start, Item, Sep, End>(
-	start: Start, item: Item, sep: Sep, _end: End,
+	start: Start, item: Item, sep: Sep, end_: End,
 ) -> DelimList<Start, Item, Sep, End>
 where
 	T: MatchAble + ?Sized,
@@ -232,7 +224,7 @@ where
 	Sep: Matcher<T>,
 	End: Matcher<T>,
 {
-	DelimList(start, item, sep, _end)
+	DelimList(start, item, sep, end_)
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DelimList<Start, Item, Sep, End>(Start, Item, Sep, End);
@@ -251,11 +243,11 @@ impl<
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<Self::Capture<'src>, M> {
-		let Self(start, item, sep, _end) = self;
+		let Self(start, item, sep, end_) = self;
 		let mut items = Vec::new();
 		start.do_match::<M::WithoutCapture>(matched, off)?;
 		loop {
-			if atomic(_end).test(matched, off) {
+			if atomic(end_).test(matched, off) {
 				break;
 			}
 			let item = item.do_match::<M>(matched, off)?;
@@ -263,7 +255,7 @@ impl<
 				items.push(M::unwrap_success(item));
 			}
 			if !atomic(sep).test(matched, off) {
-				_end.do_match::<M::WithoutCapture>(matched, off)?;
+				end_.do_match::<M::WithoutCapture>(matched, off)?;
 				break;
 			}
 		}
