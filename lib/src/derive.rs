@@ -48,6 +48,7 @@ macro_rules! define_slice_matcher {
 				&self, matched: &'src $matched, off: &mut usize,
 			) -> $crate::result::MatchResult<Self::Capture<'src>, M> {
 				let $matcher = self;
+				#[allow(unused)]
 				use $crate::MatchAble;
 				$crate::derive::match_slice::<M, _, _>(matched, off, self.len(), 
 					|$slice| $logic.then_some($slice), 

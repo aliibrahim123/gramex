@@ -17,7 +17,7 @@ pub struct SimpleSpan<T = usize> {
 	pub start: T,
 	pub end: T,
 }
-impl<T: Clone + PartialEq + Ord + Add<usize, Output = T>> SimpleSpan<T> {
+impl<T: Clone + PartialEq + Ord + Add<Output = T> + From<u8>> SimpleSpan<T> {
 	pub fn new(start: T, end: T) -> Self {
 		Self { start, end }
 	}
@@ -28,10 +28,10 @@ impl<T: Clone + PartialEq + Ord + Add<usize, Output = T>> SimpleSpan<T> {
 		self.end.clone()
 	}
 	pub fn point(ind: T) -> Self {
-		Self::new(ind.clone(), ind + 1)
+		Self::new(ind.clone(), ind + 1.into())
 	}
 	pub fn is_point(&self) -> bool {
-		self.start.clone() + 1 == self.end
+		self.start.clone() + 1.into() == self.end
 	}
 	pub fn join(&self, other: &Self) -> Self {
 		Self::new(

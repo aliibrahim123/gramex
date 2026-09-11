@@ -34,15 +34,16 @@ dependencies = [
 
 [[package]]
 name = "gramex"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "gramex-macro",
  "lean_string",
+ "rustc-hash",
 ]
 
 [[package]]
 name = "gramex-macro"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chunked-quote",
  "proc-macro2",

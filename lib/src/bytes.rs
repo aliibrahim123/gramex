@@ -11,7 +11,6 @@ use crate::{
 	MatchAble, Matcher, Mode,
 	derive::{
 		define_ref_matcher, define_slice_matcher, define_token_matcher, match_slice,
-		match_token,
 	},
 	result::{Expected, MatchError, MatchResult},
 };

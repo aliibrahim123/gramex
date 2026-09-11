@@ -7,7 +7,7 @@ use lean_string::LeanString;
 
 use crate::{
 	MatchAble, Matcher, Mode,
-	derive::{define_slice_matcher, define_token_matcher, match_slice, match_token},
+	derive::{define_slice_matcher, define_token_matcher, match_slice},
 	result::{Expected, MatchResult},
 };
 
