@@ -17,5 +17,5 @@ clippy.pedantic = "warn"
 [dependencies]
 proc-macro2 = "1.0.107"
 quote = "1.0.47"
-chunked-quote = "0.1.9"
+chunked-quote = "0.1.12"
 rustc-hash = "2.1.3"

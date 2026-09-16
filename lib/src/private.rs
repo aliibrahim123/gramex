@@ -24,10 +24,6 @@ pub fn expected_not(expected: &Expected) -> Expected {
 		_ => Expected::Not(expected.to_lean_string()),
 	}
 }
-pub fn error_not(expected: &Expected, is_mismatch: bool, off: usize) -> MatchError {
-	let expected = expected_not(expected);
-	MatchError::expected(expected, !is_mismatch, off)
-}
 pub fn expected_or(cases: &[Expected]) -> Expected {
 	let mut resolved = Vec::with_capacity(cases.len());
 	for case in cases {
@@ -37,9 +33,9 @@ pub fn expected_or(cases: &[Expected]) -> Expected {
 	}
 	if resolved.is_empty() { Expected::None } else { Expected::OneOf(resolved) }
 }
-#[must_use]
-pub fn error_or(cases: &[Expected], is_mismatch: bool, off: usize) -> MatchError {
-	MatchError::expected(expected_or(cases), !is_mismatch, off)
+
+pub fn error(expected: Expected, is_incomplete: bool, off: usize) -> MatchError {
+	MatchError::expected(expected, is_incomplete, off)
 }
 
 pub fn unwrap_result<T, E>(r: Result<T, E>) -> T {

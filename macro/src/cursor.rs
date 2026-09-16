@@ -1,13 +1,19 @@
-//! defines the [`Cursor`] struct.
+//! [`Cursor`] for ergonomic [`TokenStream`] parsing
 
 use std::{fmt::Display, str::FromStr};
 
 use chunked_quote::chunk_spanned;
+#[allow(unused)]
+pub use proc_macro2::Punct;
+
 use proc_macro2::{
 	Delimiter, Group, Ident, Literal, Spacing, Span, TokenStream, TokenTree,
 };
 use quote::ToTokens;
 
+/// create an [`Ident`] from a format string.
+///
+/// custom span can be given by `ident!("format str", span = expr, ...)`
 macro_rules! ident {
 	($format:literal, span = $span:expr, $($t:tt)*) => {
 		proc_macro2::Ident::new(&format!($format, $($t)*), $span)
@@ -22,16 +28,20 @@ pub(crate) use ident;
 #[derive(Debug)]
 pub struct Cursor<'a> {
 	pub tokens: Box<[TokenTree]>,
+	/// the current index
 	pub ind: usize,
+	/// span of end delim in groups, else [`Span::call_site`]
 	pub end_span: Span,
 	pub errors: &'a mut Vec<Error>,
 }
 impl Cursor<'_> {
+	/// creates a new [`Cursor`]
 	pub fn new(
 		stream: TokenStream, end_span: Span, errors: &mut Vec<Error>,
 	) -> Cursor<'_> {
 		Cursor { tokens: stream.into_iter().collect(), ind: 0, end_span, errors }
 	}
+	/// returns the [`TokenTree`] at `n` tokens ahead
 	pub fn peek_next(&self, n: usize) -> Option<&TokenTree> {
 		self.tokens.get(self.ind + n)
 	}
@@ -59,6 +69,7 @@ impl Cursor<'_> {
 	pub fn rewind(&mut self, ind: usize) {
 		self.ind = ind;
 	}
+	/// append an error being `expected {expected}`
 	pub fn expected(&mut self, expected: impl Display) {
 		err!(self, "expected {expected}");
 	}
@@ -80,29 +91,28 @@ impl Cursor<'_> {
 		self.skip();
 		true
 	}
-
+	/// test a [`Punct`] of a specific character without advancing
 	pub fn test_punct(&self, char: char) -> bool {
 		let Some(TokenTree::Punct(punct)) = self.peek() else { return false };
 		punct.as_char() == char
 	}
-	/// eat multiple [`Punct`]s of specific characters
+	/// eat multiple joined [`Punct`]s of specific characters
 	pub fn multi_punct<const N: usize>(
 		&mut self, chars: [char; N],
 	) -> Option<TokenStream> {
 		if self.try_multi_punct(chars) {
-			Some(TokenStream::from_iter(
-				self.tokens[self.ind - N..self.ind].iter().cloned(),
-			))
+			Some(self.tokens[self.ind - N..self.ind].iter().cloned().collect())
 		} else {
-			let chars = chars.iter().collect::<String>();
+			let chars = String::from_iter(chars);
 			err!(self, "expected `{chars}");
 			None
 		}
 	}
+	/// try eat multiple joined [`Punct`]s of specific characters
 	pub fn try_multi_punct<const N: usize>(&mut self, chars: [char; N]) -> bool {
 		self.test_multi_punct(chars).then(|| self.ind += N).is_some()
 	}
-	/// try eat multiple [`Punct`]s of specific characters
+	/// test multiple joined [`Punct`]s of specific characters without advancing
 	#[allow(clippy::needless_range_loop)]
 	pub fn test_multi_punct<const N: usize>(&self, chars: [char; N]) -> bool {
 		// head
@@ -113,6 +123,7 @@ impl Cursor<'_> {
 				return false;
 			}
 		}
+		// tail
 		matches!(self.peek_next(N - 1), Some(TokenTree::Punct(punct))
 			if punct.as_char() == chars[N - 1]
 		)
@@ -152,6 +163,7 @@ impl Cursor<'_> {
 		self.skip();
 		true
 	}
+	/// test a specific [`Ident`] without advancing
 	pub fn test_kw(&self, kw: &str) -> bool {
 		let Some(TokenTree::Ident(ident)) = self.peek() else { return false };
 		ident == kw
@@ -173,6 +185,7 @@ impl Cursor<'_> {
 		self.skip();
 		Some(lit)
 	}
+	/// eat a number [`Literal`]
 	#[allow(unused)]
 	pub fn nb<T: FromStr>(&mut self) -> Option<T> {
 		if let Some(nb) = self.try_nb() {
@@ -182,6 +195,7 @@ impl Cursor<'_> {
 			None
 		}
 	}
+	/// try eat a number [`Literal`]
 	pub fn try_nb<T: FromStr>(&mut self) -> Option<T> {
 		let Some(TokenTree::Literal(lit)) = self.peek() else { return None };
 		let Ok(nb) = lit.to_string().parse::<T>() else { return None };
@@ -224,22 +238,24 @@ impl Cursor<'_> {
 		Some(Cursor::new(group.stream(), group.span_close(), self.errors))
 	}
 
-	pub fn eat_until(
-		&mut self, expected: impl Display, pred: impl Fn(&mut Self) -> bool,
+	/// eat tokens until `pred` returns `true` or the end is reached, raising error on empty
+	pub fn eat_until_non_empty(
+		&mut self, expected: impl Display, pred: impl FnMut(&mut Self) -> bool,
 	) -> Option<TokenStream> {
-		let tokens = self.try_eat_until(pred);
+		let tokens = self.eat_until(pred);
 		if tokens.is_empty() {
 			self.expected(expected);
 			return None;
 		}
 		Some(tokens)
 	}
-	pub fn try_eat_until(&mut self, pred: impl Fn(&mut Self) -> bool) -> TokenStream {
+	/// eat tokens until `pred` returns `true` or the end is reached
+	pub fn eat_until(&mut self, mut pred: impl FnMut(&mut Self) -> bool) -> TokenStream {
 		let start = self.ind;
 		while !self.is_end() && !pred(self) {
 			self.skip();
 		}
-		TokenStream::from_iter(self.tokens[start..self.ind].iter().cloned())
+		self.tokens[start..self.ind].iter().cloned().collect()
 	}
 }
 
@@ -263,6 +279,8 @@ impl ToTokens for Error {
 }
 
 /// simplifies [`Error`] creation
+///
+/// syntax `err!(cur, msg: lit | expr, span: expr)`
 macro_rules! err {
 	($cur:ident, $msg:literal $(, )?) => {{
 		$cur.errors.push(Error::new(format!($msg), $cur.cur_span()));

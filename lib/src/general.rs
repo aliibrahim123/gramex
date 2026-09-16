@@ -40,12 +40,12 @@ impl<T: MatchAble + ?Sized> Matcher<T> for pos {
 }
 
 #[inline]
-pub fn atomic<T: MatchAble + ?Sized, U: Matcher<T>>(matcher: U) -> Atomic<U> {
-	Atomic(matcher)
+pub fn atomic<T: MatchAble + ?Sized, U: Matcher<T>>(matcher: U) -> Atomic<T, U> {
+	Atomic(matcher, PhantomData)
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Atomic<U>(U);
-impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Atomic<U> {
+pub struct Atomic<T: ?Sized, U>(U, PhantomData<fn(T)>);
+impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Atomic<T, U> {
 	type Capture<'src>
 		= U::Capture<'src>
 	where
@@ -180,13 +180,17 @@ impl<T: MatchAble + ?Sized> Matcher<T> for FailWith {
 #[inline]
 pub fn list<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>>(
 	item: Item, sep: Sep,
-) -> List<Item, Sep> {
-	List(item, sep)
+) -> List<T, Item, Sep> {
+	List { item, sep, __marker: PhantomData }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct List<Item, Sep>(Item, Sep);
+pub struct List<T: ?Sized, Item, Sep> {
+	item: Item,
+	sep: Sep,
+	__marker: PhantomData<fn(&T)>,
+}
 impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
-	for List<Item, Sep>
+	for List<T, Item, Sep>
 {
 	type Capture<'src>
 		= Vec<Item::Capture<'src>>
@@ -195,7 +199,7 @@ impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<Self::Capture<'src>, M> {
-		let Self(item, sep) = self;
+		let Self { item, sep, .. } = self;
 		let mut items = Vec::new();
 		loop {
 			let item = item.do_match::<M>(matched, off)?;
@@ -209,14 +213,14 @@ impl<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>> Matcher<T>
 		M::ok(|| items)
 	}
 	fn expected(&self) -> Expected {
-		self.0.expected()
+		self.item.expected()
 	}
 }
 
 #[inline]
 pub fn delim_list<T, Start, Item, Sep, End>(
 	start: Start, item: Item, sep: Sep, end_: End,
-) -> DelimList<Start, Item, Sep, End>
+) -> DelimList<T, Start, Item, Sep, End>
 where
 	T: MatchAble + ?Sized,
 	Start: Matcher<T>,
@@ -224,17 +228,23 @@ where
 	Sep: Matcher<T>,
 	End: Matcher<T>,
 {
-	DelimList(start, item, sep, end_)
+	DelimList { start, item, sep, end_, __marker: PhantomData }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DelimList<Start, Item, Sep, End>(Start, Item, Sep, End);
+pub struct DelimList<T: ?Sized, Start, Item, Sep, End> {
+	start: Start,
+	item: Item,
+	sep: Sep,
+	end_: End,
+	__marker: PhantomData<fn(&T)>,
+}
 impl<
 	T: MatchAble + ?Sized,
 	Start: Matcher<T>,
 	Item: Matcher<T>,
 	Sep: Matcher<T>,
 	End: Matcher<T>,
-> Matcher<T> for DelimList<Start, Item, Sep, End>
+> Matcher<T> for DelimList<T, Start, Item, Sep, End>
 {
 	type Capture<'src>
 		= Vec<Item::Capture<'src>>
@@ -243,7 +253,7 @@ impl<
 	fn do_match<'src, M: Mode>(
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<Self::Capture<'src>, M> {
-		let Self(start, item, sep, end_) = self;
+		let Self { start, item, sep, end_, .. } = self;
 		let mut items = Vec::new();
 		start.do_match::<M::WithoutCapture>(matched, off)?;
 		loop {
@@ -262,7 +272,7 @@ impl<
 		M::ok(|| items)
 	}
 	fn expected(&self) -> Expected {
-		self.0.expected()
+		self.start.expected()
 	}
 }
 
