@@ -120,10 +120,10 @@ fn expected_t_value(ty: &'static str) -> Expected {
 }
 
 macro_rules! define_nb_matcher {
-	[$(($ty:ident, $le:ident, $be:ident)),+] => {
+	[$(($ty:ident, $le:ident, $le_matcher:ident, $be:ident, $be_matcher:ident)),+] => {
 		$(
-			define_nb_matcher!(define(tn_xe, $le, $ty, from_le_bytes));
-			define_nb_matcher!(define(tn_xe, $be, $ty, from_be_bytes));
+			define_nb_matcher!(define(tn_xe, $le, $le_matcher, $ty, from_le_bytes));
+			define_nb_matcher!(define(tn_xe, $be, $be_matcher, $ty, from_be_bytes));
 			impl AsLEBytes for $ty {}
 			impl AsBEBytes for $ty {}
 			define_nb_matcher!(define(XE<tn>, LE, $ty, to_le_bytes));
@@ -132,11 +132,14 @@ macro_rules! define_nb_matcher {
 			define_nb_matcher!(define(a_tn_xe, ABE, $ty, from_be_bytes));
 		)+
 	};
-	(define(tn_xe, $name:ident, $ty:ident, $from_bytes:ident)) => {
+	(define(tn_xe, $name:ident, $matcher:ident, $ty:ident, $from_bytes:ident)) => {
 		#[allow(nonstandard_style)]
+		pub const $name: $matcher = $matcher;
+		#[allow(nonstandard_style)]
+		#[doc(hidden)]
 		#[derive(Debug, Clone, Copy, PartialEq)]
-		pub struct $name;
-		impl Matcher<[u8]> for $name {
+		pub struct $matcher;
+		impl Matcher<[u8]> for $matcher {
 			type Capture<'src> = $ty;
 			#[inline]
 			fn do_match<'src, M: Mode>(
@@ -184,18 +187,18 @@ macro_rules! define_nb_matcher {
 	};
 }
 define_nb_matcher![
-	(u16, u16_le, u16_be),
-	(u32, u32_le, u32_be),
-	(u64, u64_le, u64_be),
-	(u128, u128_le, u128_be),
-	(i16, i16_le, i16_be),
-	(i32, i32_le, i32_be),
-	(i64, i64_le, i64_be),
-	(i128, i128_le, i128_be),
-	(usize, usize_le, usize_be),
-	(isize, isize_le, isize_be),
-	(f32, f32_le, f32_be),
-	(f64, f64_le, f64_be)
+	(u16, u16_le, u16_le_M, u16_be, u16_be_M),
+	(u32, u32_le, u32_le_M, u32_be, u32_be_M),
+	(u64, u64_le, u64_le_M, u64_be, u64_be_M),
+	(u128, u128_le, u128_le_M, u128_be, u128_be_M),
+	(i16, i16_le, i16_le_M, i16_be, i16_be_M),
+	(i32, i32_le, i32_le_M, i32_be, i32_be_M),
+	(i64, i64_le, i64_le_M, i64_be, i64_be_M),
+	(i128, i128_le, i128_le_M, i128_be, i128_be_M),
+	(usize, usize_le, usize_le_M, usize_be, usize_be_M),
+	(isize, isize_le, isize_le_M, isize_be, isize_be_M),
+	(f32, f32_le, f32_le_M, f32_be, f32_be_M),
+	(f64, f64_le, f64_le_M, f64_be, f64_be_M)
 ];
 
 #[cfg(feature = "bits")]

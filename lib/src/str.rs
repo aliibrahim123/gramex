@@ -80,86 +80,127 @@ define_token_matcher!(RangeInclusive<char>, str, |matcher, char| (
 ));
 
 macro_rules! define_pattern_matcher {
-	($name:ident, |$char:ident| $logic:expr, $kind:literal) => {
+	($name:ident, $matcher:ident, |$char:ident| $logic:expr, $kind:literal) => {
+		#[derive(Debug, Clone, Copy, PartialEq)]
+		#[doc(hidden)]
 		#[allow(nonstandard_style)]
-		pub struct $name;
-		define_token_matcher!($name, str, |_matcher, $char| (
+		pub struct $matcher;
+		#[allow(nonstandard_style)]
+		pub const $name: $matcher = $matcher;
+		define_token_matcher!($matcher, str, |_matcher, $char| (
 			$logic.then_some($char.len_utf8()),
 			Expected::A(LeanString::from_static_str($kind))
 		));
 	};
 }
 
-define_pattern_matcher!(upper, |char| char.is_uppercase(), "an uppercase character");
-define_pattern_matcher!(lower, |char| char.is_lowercase(), "a lowercase character");
-define_pattern_matcher!(alpha, |char| char.is_alphabetic(), "an alphabetic character");
-define_pattern_matcher!(num, |char| char.is_numeric(), "a numeric character");
+define_pattern_matcher!(
+	upper,
+	upper_M,
+	|char| char.is_uppercase(),
+	"an uppercase character"
+);
+define_pattern_matcher!(
+	lower,
+	lower_M,
+	|char| char.is_lowercase(),
+	"a lowercase character"
+);
+define_pattern_matcher!(
+	alpha,
+	alpha_M,
+	|char| char.is_alphabetic(),
+	"an alphabetic character"
+);
+define_pattern_matcher!(num, num_M, |char| char.is_numeric(), "a numeric character");
 define_pattern_matcher!(
 	alphanum,
+	alphanum_M,
 	|char| char.is_alphanumeric(),
 	"an alphanumeric character"
 );
-define_pattern_matcher!(ws, |char| char.is_whitespace(), "a whitespace character");
-define_pattern_matcher!(control, |char| char.is_control(), "a control character");
-define_pattern_matcher!(ascii, |char| char.is_ascii(), "an ascii character");
+define_pattern_matcher!(ws, ws_M, |char| char.is_whitespace(), "a whitespace character");
+define_pattern_matcher!(
+	control,
+	control_M,
+	|char| char.is_control(),
+	"a control character"
+);
+define_pattern_matcher!(ascii, ascii_M, |char| char.is_ascii(), "an ascii character");
 define_pattern_matcher!(
 	ascii_upper,
+	ascii_upper_M,
 	|char| char.is_ascii_uppercase(),
 	"an ascii uppercase character"
 );
 define_pattern_matcher!(
 	ascii_lower,
+	ascii_lower_M,
 	|char| char.is_ascii_lowercase(),
 	"an ascii lowercase character"
 );
 define_pattern_matcher!(
 	ascii_alpha,
+	ascii_alpha_M,
 	|char| char.is_ascii_alphabetic(),
 	"an ascii alphabetic character"
 );
 define_pattern_matcher!(
 	ascii_alphanum,
+	ascii_alphanum_M,
 	|char| char.is_ascii_alphanumeric(),
 	"an ascii alphanumeric character"
 );
 define_pattern_matcher!(
 	ascii_ws,
+	ascii_ws_M,
 	|char| char.is_ascii_whitespace(),
 	"an ascii whitespace character"
 );
 define_pattern_matcher!(
 	ascii_control,
+	ascii_control_M,
 	|char| char.is_ascii_control(),
 	"an ascii control character"
 );
 define_pattern_matcher!(
 	ascii_printable,
+	ascii_printable_M,
 	|char| char.is_ascii_graphic(),
 	"an ascii printable character"
 );
 define_pattern_matcher!(
 	ascii_punct,
+	ascii_punct_M,
 	|char| char.is_ascii_punctuation(),
 	"an ascii punctuation character"
 );
-define_pattern_matcher!(dec, |char| matches!(char, '0'..='9'), "a decimal digit");
+define_pattern_matcher!(dec, dec_M, |char| matches!(char, '0'..='9'), "a decimal digit");
 define_pattern_matcher!(
 	hex,
+	hex_M,
 	|char| matches!(char, '0'..='9' | 'a'..='f' | 'A'..='F'),
 	"a hexadecimal digit"
 );
 define_pattern_matcher!(
 	hex_lower,
+	hex_lower_M,
 	|char| matches!(char, '0'..='9' | 'a'..='f'),
 	"a lower hexadecimal digit"
 );
 define_pattern_matcher!(
 	hex_upper,
+	hex_upper_M,
 	|char| matches!(char, '0'..='9' | 'A'..='F'),
 	"an upper hexadecimal digit"
 );
-define_pattern_matcher!(bin, |char| matches!(char, '0'..='1'), "a binary digit");
-define_pattern_matcher!(octal, |char| matches!(char, '0'..='7'), "an octal digit");
+define_pattern_matcher!(bin, bin_M, |char| matches!(char, '0'..='1'), "a binary digit");
+define_pattern_matcher!(
+	octal,
+	octal_M,
+	|char| matches!(char, '0'..='7'),
+	"an octal digit"
+);
 
 pub fn digit(radix: u8) -> Digit {
 	assert!(radix >= 2 && radix <= 36);

@@ -190,7 +190,7 @@ fn parse_rep(cur: &mut Cursor) -> Rep {
 }
 
 /// parse `path | path '<' args:list<matcher, ','> '>'` [`Atom`]
-fn parse_atom_path(cur: &mut Cursor, path: Vec<TokenTree>) -> Option<Atom> {
+fn parse_atom_path(cur: &mut Cursor, mut path: Vec<TokenTree>) -> Option<Atom> {
 	if cur.try_punct('<') {
 		let mut args = Vec::new();
 		if !cur.test_punct('>') {
@@ -201,6 +201,8 @@ fn parse_atom_path(cur: &mut Cursor, path: Vec<TokenTree>) -> Option<Atom> {
 		}
 		cur.punct('>')?;
 		Some(Atom::Call { path: path.into_boxed_slice(), args: args.into_boxed_slice() })
+	} else if path.len() == 1 {
+		Some(Atom::Matcher(path.pop().unwrap()))
 	} else {
 		Some(Atom::Matcher(TokenTree::Group(Group::new(
 			Delimiter::None,
@@ -578,38 +580,43 @@ pub fn parse_match_expr(cur: &mut Cursor, is_cur_op: bool) -> Option<MatchExpr> 
 
 /// `match_map` macro args
 ///
-/// grammer: `cursor:expr ',' '{'
+/// grammer: `cursor:ident ',' '{'
 ///     (arms* = pat:expr "=>" map:expr") ("else" -> "=>" else_:expr) ','?
 /// '}'`
 #[derive(Debug)]
 pub struct MatchMap {
-	pub cursor: TokenStream,
+	pub cursor: Ident,
 	pub arms: Vec<Capture>,
 	pub else_: TokenStream,
 }
 
-/// parse a [`MatchMap`]
-pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
-	let cursor = cur.eat_until_non_empty("an expression", |cur| cur.test_punct(','))?;
-	cur.punct(',');
-
-	let mut arms_cur = cur.enter_group(Brace)?;
+/// parse `pat:expr "=>" map:expr` in `match_map` body
+fn parse_match_map_arms(cur: &mut Cursor) -> Option<Vec<Capture>> {
 	let mut arms = Vec::new();
-	while !arms_cur.is_end() && !arms_cur.test_kw("else") {
-		let pat = parse_expr(&mut arms_cur);
-		arms_cur.multi_punct(['=', '>']);
+	while !cur.is_end() && !cur.test_kw("else") {
+		let pat = parse_expr(cur);
+		cur.multi_punct(['=', '>']);
 
-		let map =
-			arms_cur.eat_until_non_empty("an expression", |cur| cur.test_punct(','));
+		let map = cur.eat_until_non_empty("an expression", |cur| cur.test_punct(','));
 
 		// transform into a capture to simplify codegen
 		let cap = Capture { ident: ident!("root"), expr: pat, map, ..Default::default() };
 		arms.push(cap);
 
-		if !arms_cur.is_end() {
-			arms_cur.punct(',');
+		if !cur.is_end() {
+			cur.punct(',');
 		}
 	}
+	Some(arms)
+}
+
+/// parse a [`MatchMap`]
+pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
+	let cursor = cur.ident()?;
+	cur.punct(',');
+
+	let mut arms_cur = cur.enter_group(Brace)?;
+	let arms = parse_match_map_arms(&mut arms_cur)?;
 
 	let else_ = if arms_cur.try_kw("else") {
 		arms_cur.multi_punct(['=', '>']);

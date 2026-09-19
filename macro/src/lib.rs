@@ -8,7 +8,9 @@ use chunked_quote::quote;
 use proc_macro2::{Span, TokenStream};
 
 use crate::{
-	capture::{CapMod, analyze_matcher, analyze_root_cap, analyze_term, forbid_captures},
+	capture::{
+		DefType, analyze_matcher, analyze_root_cap, analyze_term, forbid_captures,
+	},
 	cursor::{Cursor, ident},
 	generate::{
 		CursorOp, gen_cursor_op, gen_enum_matcher, gen_imports, gen_match_expr,
@@ -33,9 +35,9 @@ pub fn gramex(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let mut decl = parse_grammer_decl(&mut cur);
 
 	// analyze
-	let mut cap_mod = CapMod::default();
+	let mut gened_items = TokenStream::new();
 	let mut ctx = capture::Context {
-		capture_mod: Some(&mut cap_mod),
+		def_type: &mut DefType::decl(&mut gened_items),
 		errors: &mut errors,
 		matched_type: Some(&decl.matched_type),
 	};
@@ -55,7 +57,7 @@ pub fn gramex(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 		mod #{ident!("gram_def_{id}")} {
 			use super::*;
 			#do { gen_imports(__stream) }
-			#{cap_mod.stream}
+			#{gened_items}
 			#stream
 		}
 		pub use #{ident!("gram_def_{id}")}::*;
@@ -71,7 +73,11 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let mut matcher = parse_matcher(&mut cur, false);
 
 	// analyze
-	let mut ctx = capture::Context::new_expr(None, &mut errors);
+	let mut ctx = capture::Context {
+		def_type: &mut DefType::Expr,
+		matched_type: None,
+		errors: &mut errors,
+	};
 	analyze_matcher(&mut matcher, &mut ctx);
 
 	// gen
@@ -101,7 +107,11 @@ fn match_expr(
 
 	// analyze
 	if capture {
-		let mut ctx = capture::Context::new_expr(matched_type.as_ref(), &mut errors);
+		let mut ctx = capture::Context {
+			def_type: &mut DefType::Expr,
+			matched_type: matched_type.as_ref(),
+			errors: &mut errors,
+		};
 		let mut cap = Capture { ident: ident!("root"), expr, ..Default::default() };
 		analyze_root_cap(&mut cap, false, &mut ctx);
 		expr = Expr::Capture(Box::new(cap));
@@ -183,7 +193,11 @@ pub fn match_map(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 	// analyze
 	for arm in &mut arms {
-		let mut ctx = capture::Context::new_expr(None, &mut errors);
+		let mut ctx = capture::Context {
+			def_type: &mut DefType::Expr,
+			matched_type: None,
+			errors: &mut errors,
+		};
 		analyze_root_cap(arm, false, &mut ctx);
 	}
 

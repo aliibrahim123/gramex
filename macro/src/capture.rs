@@ -1,9 +1,9 @@
 //! symantic analysis for captures: validation, type resolution, item generation, kind resolution..
 
 use chunked_quote::{chunk, quote};
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::ToTokens;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
 	cursor::{Error, err},
@@ -86,32 +86,42 @@ impl CapParent {
 	}
 }
 
-/// capture module result
-#[derive(Debug, Default)]
-pub struct CapMod {
-	pub stream: TokenStream,
-	items: FxHashSet<String>,
+#[derive(Debug)]
+pub enum DefType<'src> {
+	Expr,
+	Decl {
+		items_def: &'src mut TokenStream,
+		items: FxHashSet<String>,
+		terms_types: FxHashMap<String, TokenStream>,
+	},
+}
+impl<'src> DefType<'src> {
+	pub fn decl(items_def: &'src mut TokenStream) -> Self {
+		Self::Decl {
+			items_def,
+			items: FxHashSet::default(),
+			terms_types: FxHashMap::default(),
+		}
+	}
+	fn items_def(&mut self) -> Option<&mut TokenStream> {
+		match self {
+			Self::Expr => None,
+			Self::Decl { items_def, .. } => Some(items_def),
+		}
+	}
 }
 
 /// analysis common state
 #[derive(Debug)]
-pub struct Context<'src> {
-	/// only `Some` in grammer decl
-	pub capture_mod: Option<&'src mut CapMod>,
+pub struct Context<'src, 'b> {
+	pub def_type: &'src mut DefType<'b>,
 	pub matched_type: Option<&'src TokenStream>,
 	pub errors: &'src mut Vec<Error>,
-}
-impl<'src> Context<'src> {
-	pub fn new_expr(
-		matched_type: Option<&'src TokenStream>, errors: &'src mut Vec<Error>,
-	) -> Context<'src> {
-		Self { capture_mod: None, matched_type, errors }
-	}
 }
 
 /// recursivly resolve info for all captures in the expression tree
 fn resolve_captures(
-	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context<'_>,
+	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context,
 ) {
 	match expr {
 		Expr::And(exprs) | Expr::Seq(exprs) => {
@@ -137,7 +147,7 @@ fn resolve_captures(
 }
 /// resolve captures inside a unit expression
 fn resolve_captures_unit(
-	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context<'_>,
+	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context,
 ) {
 	match expr {
 		Expr::Unit { not, rep, atom: Atom::Group(expr), .. } => {
@@ -205,8 +215,8 @@ fn has_capture(expr: &Expr) -> bool {
 
 /// the default capture type
 fn default_cap(matched_type: Option<&TokenStream>) -> TokenStream {
-	if let Some(m) = matched_type {
-		quote! { <#m as __MatchAble>::Slice<'src> }
+	if let Some(ty) = matched_type {
+		quote! { <#ty as __MatchAble>::Slice<'src> }
 	} else {
 		// should not do any harm as it is used only in matchers and generated items that are always has matched_type specified
 		TokenStream::new()
@@ -228,12 +238,12 @@ fn resolve_gen_type(
 ) -> Result<(TokenStream, Create), ()> {
 	let item_ident = item_ident.take().unwrap_or_else(|| pascal_case(cap_ident));
 
-	let Some(cap_mod) = ctx.capture_mod.as_deref_mut() else {
+	let DefType::Decl { items, .. } = ctx.def_type else {
 		let msg = "can not use generated capture type outside grammar declerations";
 		err!(ctx, msg, cap_ident.span());
 		return Err(());
 	};
-	if !cap_mod.items.insert(item_ident.to_string()) {
+	if !items.insert(item_ident.to_string()) {
 		err!(ctx, "a generated item exist with the same name", item_ident.span());
 		return Err(());
 	}
@@ -241,11 +251,25 @@ fn resolve_gen_type(
 	Ok((quote! { #item_ident::<'src> }, create(item_ident)))
 }
 
+fn is_term_capture(expr: &Expr, ctx: &Context) -> Option<TokenStream> {
+	if let DefType::Decl { terms_types, .. } = &ctx.def_type
+		&& let Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom } = expr
+		&& let Atom::Matcher(TokenTree::Ident(ident)) = atom
+	{
+		terms_types.get(&ident.to_string()).cloned()
+	} else {
+		None
+	}
+}
+
 /// resolve capture type from its type specifier
 fn resolve_capture_type(
 	cap: &mut Capture, ctx: &mut Context,
 ) -> Result<(TokenStream, Create), ()> {
 	match &mut cap.ty {
+		CapType::Inherited if let Some(ty) = is_term_capture(&cap.expr, ctx) => {
+			Ok((ty, Create::None))
+		}
 		CapType::Inherited => Ok((default_cap(ctx.matched_type), Create::None)),
 		CapType::Explicit(ty) => Ok((ty.clone(), Create::None)),
 		CapType::Struct(item_ident) => {
@@ -259,12 +283,12 @@ fn resolve_capture_type(
 
 /// generate generated struct definition
 fn gen_struct(item: &Ident, this: &CapParent, ctx: &mut Context) {
-	let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
-	chunk!(stream,
+	let mut items_def = ctx.def_type.items_def().unwrap();
+	chunk!(items_def,
 		# #[derive(Debug)]
 		pub struct #item<'src> {
 			#for child in &this.children #{
-				pub #{&child.name}: #do { child.write_type(stream) },
+				pub #{&child.name}: #do { child.write_type(items_def) },
 			}
 			// case every capture is owned
 			# #[doc(hidden)] pub __life_marker: __::PhantomData<&'src ()>,
@@ -273,8 +297,8 @@ fn gen_struct(item: &Ident, this: &CapParent, ctx: &mut Context) {
 }
 /// generate generated unit struct definition
 fn gen_unit_struct(item: &Ident, ctx: &mut Context) {
-	let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
-	chunk!(stream,
+	let mut items_def = ctx.def_type.items_def().unwrap();
+	chunk!(items_def,
 		# #[derive(Debug)]
 		pub struct #item<'src> (pub #{default_cap(ctx.matched_type)});
 	);
@@ -283,12 +307,12 @@ fn gen_unit_struct(item: &Ident, ctx: &mut Context) {
 fn gen_enum(
 	item: &Ident, has_none: bool, variants_def: Option<TokenStream>, ctx: &mut Context,
 ) {
-	let mut stream = &mut ctx.capture_mod.as_mut().unwrap().stream;
-	chunk!(stream,
+	let mut items_def = ctx.def_type.items_def().unwrap();
+	chunk!(items_def,
 		# #[derive(Debug)]
 		pub enum #item<'src> {
 			#if has_none #{ None, }
-			#do { stream.extend(variants_def.unwrap()) }
+			#do { items_def.extend(variants_def.unwrap()) }
 			// maybe all variants be owned, Infalliable to remove from exhustive check
 			# #[doc(hidden)] __LifeMarker (
 				__::PhantomData<&'src ()>, __::Infallible
@@ -579,7 +603,7 @@ pub fn analyze_matcher(matcher: &mut Matcher, ctx: &mut Context) {
 	}
 	let mut ctx = Context {
 		matched_type: matcher.matched_type.as_ref(),
-		capture_mod: ctx.capture_mod.as_deref_mut(),
+		def_type: ctx.def_type,
 		errors: ctx.errors,
 	};
 
@@ -598,4 +622,8 @@ pub fn analyze_term(term: &mut Term, ctx: &mut Context) {
 	}
 
 	analyze_root_cap(cap, true, ctx);
+
+	let DefType::Decl { terms_types, .. } = ctx.def_type else { unreachable!() };
+	let term_type = term.cap.info.as_ref().unwrap().resolved_type.clone();
+	terms_types.insert(term.name.to_string(), term_type);
 }

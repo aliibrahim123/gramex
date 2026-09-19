@@ -73,7 +73,7 @@ pub trait Cursor<'src> {
 	fn map_error(&mut self, err: MatchError) -> Self::Error;
 
 	#[inline]
-	fn peek(&'src self) -> Option<<Self::MatchAble as MatchAble>::Token<'src>> {
+	fn peek(&self) -> Option<<Self::MatchAble as MatchAble>::Token<'src>> {
 		self.input().get_token(self.off())
 	}
 	#[inline]
@@ -112,11 +112,38 @@ pub trait Cursor<'src> {
 	fn rewind(&mut self, off: usize) {
 		*self.off_mut() = off;
 	}
-	fn expected(&mut self, expected: impl Into<Expected>) -> Result<(), Self::Error> {
+	fn expected<T>(&mut self, expected: impl Into<Expected>) -> Result<T, Self::Error> {
 		let err = match self.is_end() {
 			true => MatchError::incomplete(expected.into(), self.off()),
 			false => MatchError::mismatch(expected.into(), self.off()),
 		};
 		Err(self.map_error(err))
+	}
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SimpleCursor<'src, T: MatchAble + ?Sized + 'src> {
+	pub input: &'src T,
+	pub off: usize,
+}
+impl<'src, T: MatchAble + ?Sized> SimpleCursor<'src, T> {
+	pub fn new(input: &'src T) -> Self {
+		Self { input, off: 0 }
+	}
+}
+impl<'src, T: MatchAble + ?Sized> Cursor<'src> for SimpleCursor<'src, T> {
+	type MatchAble = T;
+	type Error = MatchError;
+	fn input(&self) -> &'src Self::MatchAble {
+		self.input
+	}
+	fn off(&self) -> usize {
+		self.off
+	}
+	fn off_mut(&mut self) -> &mut usize {
+		&mut self.off
+	}
+	fn map_error(&mut self, err: MatchError) -> Self::Error {
+		err
 	}
 }

@@ -8,9 +8,12 @@ use crate::{
 };
 
 #[allow(nonstandard_style)]
+pub const end: end_M = end_M;
+#[doc(hidden)]
+#[allow(nonstandard_style)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct end;
-impl<T: MatchAble + ?Sized> Matcher<T> for end {
+pub struct end_M;
+impl<T: MatchAble + ?Sized> Matcher<T> for end_M {
 	type Capture<'src>
 		= ()
 	where
@@ -26,9 +29,12 @@ impl<T: MatchAble + ?Sized> Matcher<T> for end {
 }
 
 #[allow(nonstandard_style)]
+pub const pos: pos_M = pos_M;
+#[doc(hidden)]
+#[allow(nonstandard_style)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct pos;
-impl<T: MatchAble + ?Sized> Matcher<T> for pos {
+pub struct pos_M;
+impl<T: MatchAble + ?Sized> Matcher<T> for pos_M {
 	type Capture<'src>
 		= usize
 	where
