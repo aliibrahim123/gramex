@@ -591,7 +591,7 @@ pub struct MatchMap {
 }
 
 /// parse `pat:expr "=>" map:expr` in `match_map` body
-fn parse_match_map_arms(cur: &mut Cursor) -> Option<Vec<Capture>> {
+fn parse_match_map_arms(cur: &mut Cursor) -> Vec<Capture> {
 	let mut arms = Vec::new();
 	while !cur.is_end() && !cur.test_kw("else") {
 		let pat = parse_expr(cur);
@@ -607,7 +607,7 @@ fn parse_match_map_arms(cur: &mut Cursor) -> Option<Vec<Capture>> {
 			cur.punct(',');
 		}
 	}
-	Some(arms)
+	arms
 }
 
 /// parse a [`MatchMap`]
@@ -616,7 +616,7 @@ pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
 	cur.punct(',');
 
 	let mut arms_cur = cur.enter_group(Brace)?;
-	let arms = parse_match_map_arms(&mut arms_cur)?;
+	let arms = parse_match_map_arms(&mut arms_cur);
 
 	let else_ = if arms_cur.try_kw("else") {
 		arms_cur.multi_punct(['=', '>']);
