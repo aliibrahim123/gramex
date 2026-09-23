@@ -28,7 +28,7 @@ mod generate;
 mod parse;
 
 #[proc_macro]
-pub fn gramex(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn grammar(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	// parse
 	let mut errors = Vec::new();
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);

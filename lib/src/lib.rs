@@ -1,13 +1,13 @@
 //! # gramex
 //! grammar expressions, a common language for advance parsers.
 //!
-//! gramex is a [framework](Matcher) for building [ergonomic](matches!), [efficient](Mode) and [advance](cursor) parsers, [tokenizers](cursor::match_map) and any form of [grammar based transformers](crate::gramex).
+//! gramex is a [framework](Matcher) for building [ergonomic](matches!), [efficient](Mode) and [advance](cursor) parsers, [tokenizers](cursor::match_map) and any form of [grammar based transformers](crate::grammar).
 //!
 //! it simplifies parsing by providing simple [matching constructs](parse!) with [expressive DSL](gram_ref), while also featuring enriched [imperative experience](cursor) for advance use cases.
 //!
 //! # features
 //! ## powerful core
-//! gramex is universal in its core, everything can be [`MatchAble`], from [`str`](crate::str) to [`[u8]`](bytes) to [`YourTokenList`](MatchAble#impl-quide), provided the required infrastructure.
+//! gramex is universal in its core, everything can be [`MatchAble`], from [`str`](mod@str) to [`[u8]`](bytes) to [`YourTokenList`](MatchAble#impl-quide), provided the required infrastructure.
 //!
 //! it also adhere to rust zero cost abstraction principle, it leverage the power of [GATs](Mode) to enable its [`Matcher`]s get monomorphized into highly optimized code doing only the required [features](Mode#features).
 //!
@@ -18,7 +18,7 @@
 //!
 //! this grammar expressions support powerfull [capturing abilities](gram_ref#captures), with [nesting](gram_ref#structural-captures) and [enumeration](gram_ref#enumerated-captures) support, and [mapping](gram_ref#mapping) into [auto generated types](gram_ref#generated-items).
 //!
-//! this expressions can be used everywhere, declared inside [standalone definitions](crate::gramex), or used [inline](parse!) in the normal code, and even enriching the [imperative cursors](cursor::eat).
+//! this expressions can be used everywhere, declared inside [standalone definitions](crate::grammar), or used [inline](parse!) in the normal code, and even enriching the [imperative cursors](cursor::eat).
 //!
 //! ## imperative cursors for advance cases
 //! gramex doesnt only generate simple parsers, it can empowers [advance parsers](cursor#why) through its imperative mode: the parsing [`cursor`]s.
@@ -53,7 +53,7 @@
 //! }
 //!
 //! // grammar declaration, define multiple matchers
-//! gramex! {
+//! grammar! {
 //!     for str;
 //!     let ident: String = ('a'..'z' | 'A'..'Z' | '0'..'9' | '_')+;
 //!     // `=> expr` mapping of the matched section (binded as `nb`)
@@ -98,9 +98,9 @@
 //! gramex is minimal by default, and its featureset can be fainly selected by its feature flags.
 //! - `std` (enabled by default): support for the standard library types.
 //! - `macros`: enable all the macros.
-//! - `str`: enable [`str`](crate::str) matching.
+//! - `str`: enable [`str`](mod@str) matching.
 //! - `bytes`: enable [byte slices `[u8]`](crate::bytes) matching.
-//! - `bits`: enable [`bits`](crate::bits) matching.
+//! - `bits`: enable [`bits`] matching.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::must_use_candidate)]
@@ -115,7 +115,7 @@ extern crate alloc as alloc_crate;
 #[cfg(feature = "std")]
 extern crate std as alloc_crate;
 
-//#[cfg(doc)]
+#[cfg(doc)]
 pub mod gram_ref;
 
 mod core;
@@ -124,6 +124,7 @@ pub mod general;
 pub mod result;
 
 pub use core::{MatchAble, Matcher, Mode, check, matches, parse, try_match};
+/// [`Mode`] concrete types
 pub mod modes {
 	pub use crate::core::{Capture, Check, Parse, Test};
 }
@@ -133,7 +134,7 @@ pub mod modes {
 pub mod __private;
 
 #[cfg(feature = "macros")]
-pub use gramex_macro::{check, gramex, matcher, matches, parse, try_match};
+pub use gramex_macro::{check, grammar, matcher, matches, parse, try_match};
 
 #[cfg(feature = "bits")]
 pub mod bits;

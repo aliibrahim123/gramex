@@ -3,7 +3,7 @@
 //!
 //! these expressions work on all [`MatchAble`] types, and they get transformed into efficient [raw `Matcher`](Matcher#impl) style matching logic.
 //!
-//! they can be used in different contexes, as standalone items or inlined with the code, by the different macros provided by gramex: [`gramex!`], [`matches!`], [`try_match!`], [`check!`], [`parse!`], [`matcher!`], [`eat!`], [`try_eat!`], [`test!`], and [`match_map!`].
+//! they can be used in different contexes, as standalone items or inlined with the code, by the different macros provided by gramex: [`grammar!`], [`matches!`], [`try_match!`], [`check!`], [`parse!`], [`matcher!`], [`eat!`], [`try_eat!`], [`test!`], and [`match_map!`].
 //!
 //! the grammar expressions are composed of [atoms](#atoms) representing atomic patterns, and expressions chains representing compound patterns.
 //!
@@ -281,7 +281,7 @@
 //! ```
 //! the capture type specifier specifies the base type of the capture (without the [repetition](#repetition)) when requried.
 //!
-//! captures doesnt always require to specify its type, only when the default type doesnt work in contexes requiring it: [terms](gramex!#term) and matchers root capture, [generated items](#generated-items) nested captures.
+//! captures doesnt always require to specify its type, only when the default type doesnt work in contexes requiring it: [terms](grammar!#term) and matchers root capture, [generated items](#generated-items) nested captures.
 //!
 //! inside the type specifier, a `'src` lifetime is given related to the [matched value](MatchAble) lifetime.
 //!
@@ -290,7 +290,7 @@
 //!     try_match!("abc", a:'a' (bc = "bc" => bc.to_string())),
 //!     Some(("a", "bc")),
 //! );
-//! gramex! {
+//! grammar! {
 //!     for str;
 //!     let nb: u8 = ('0'..'9')+ => nb.parse().unwrap();
 //! }
@@ -337,7 +337,7 @@
 //!
 //! they resolve to the [`Capture`](Matcher::Capture) returned by the atom [`Matcher`].
 //!
-//! they support [mapping](#mapping) and [`Into::into`] convertion, and may need to specify their [type](#type-specifier) unless they are [call atom](#call-atom) to a local [term](gramex!#term).
+//! they support [mapping](#mapping) and [`Into::into`] convertion, and may need to specify their [type](#type-specifier) unless they are [call atom](#call-atom) to a local [term](grammar!#term).
 //!
 //! ```
 //! assert_eq!(try_match!("abc", abc:{Box::new("abc")}), Some(("abc",)));
@@ -406,7 +406,7 @@
 //! a [slice capture](#slice-captures) can generate a struct type, which become `Struct<'src>(MatchAble::Slice)`.
 //!
 //! ```
-//! gramex!{
+//! grammar!{
 //!     for str;
 //!     let cap_struct: struct = a:'a' (b: String = 'b') c:'c'..'z';
 //!     let cap_enum: enum Enum = a:'a' | (b: struct = 'b' _[2]) | 'c';

@@ -791,6 +791,10 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 
 		# #[doc(hidden)]
 		# #[allow(nonstandard_style)]
+		#if args.is_empty() #{
+			# #[derive(Clone, Copy)]
+		}
+		# #[derive(Debug)]
 		pub struct #matcher_ident
 		#if !args.is_empty() #{
 			<#for arg in args #{
@@ -817,6 +821,7 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 pub fn gen_matcher(mut stream: &mut TokenStream, matcher: &Matcher) {
 	let Some(matched_type) = matcher.matched_type.as_ref() else { return };
 	chunk!(stream,
+		# #[derive(Debug, Clone, Copy)]
 		struct Matcher;
 		#do { gen_matcher_impl(
 			stream, &ident!("Matcher"), &matcher.cap, matched_type, &[], |_, _| ()
