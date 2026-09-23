@@ -194,9 +194,9 @@ fn parse_atom_path(cur: &mut Cursor, mut path: Vec<TokenTree>) -> Option<Atom> {
 	if cur.try_punct('<') {
 		let mut args = Vec::new();
 		if !cur.test_punct('>') {
-			args.push(parse_matcher(cur, true));
+			args.push(parse_call_arg(cur));
 			while cur.try_punct(',') && !cur.test_punct('>') {
-				args.push(parse_matcher(cur, true));
+				args.push(parse_call_arg(cur));
 			}
 		}
 		cur.punct('>')?;
@@ -417,18 +417,15 @@ pub fn parse_expr(cur: &mut Cursor) -> Expr {
 }
 
 /// matcher definition
-///
-/// **grammer**: (
-///     {when(inside_call)} -> "for" matched_type:type ':' |
-///     "for" -> `matched_type:type` ':'
-/// ) expr ("=>" -> map:expr))
 #[derive(Debug, Clone)]
 pub struct Matcher {
 	pub matched_type: Option<TokenStream>,
 	pub cap: Capture,
 }
-/// parse a [`Matcher`]
-pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
+/// parse a [`Matcher`] argument in a call atom
+///
+/// **grammer**: `("for" -> `matched_type:type` ':') expr ("=>" -> map:expr))
+pub fn parse_call_arg(cur: &mut Cursor) -> Matcher {
 	let matched_type = match cur.try_kw("for") {
 		true => {
 			let ty = cur.eat_until_non_empty("a type", |cur| {
@@ -439,29 +436,53 @@ pub fn parse_matcher(cur: &mut Cursor, inside_call: bool) -> Matcher {
 			cur.punct(':');
 			ty
 		}
-		false if !inside_call => {
-			cur.expected("`for`");
-			return Matcher { matched_type: None, cap: Capture::default() };
-		}
 		false => None,
 	};
 
 	let expr = parse_expr(cur);
 	let map = match cur.try_multi_punct(['=', '>']) {
 		true => cur.eat_until_non_empty("a expression", |cur| {
-			if inside_call {
-				cur.test_punct(',') || cur.test_punct('>')
-			} else {
-				cur.is_end()
-			}
+			cur.test_punct(',') || cur.test_punct('>')
 		}),
 		false => None,
 	};
-	if !inside_call && !cur.is_end() {
+
+	let cap = Capture { ident: ident!("root"), map, expr, ..Default::default() };
+
+	Matcher { matched_type, cap }
+}
+
+/// parse a [`Matcher`] for `matcher` macro
+///
+/// grammar: `"for" matched:type ':' ("Capture" -> ':' type)? expr ("=>" -> map:expr)`
+pub fn parse_matcher(cur: &mut Cursor) -> Matcher {
+	if cur.kw("for").is_none() {
+		return Matcher { matched_type: None, cap: Capture::default() };
+	}
+	let matched_type = cur.eat_until_non_empty("a type", |cur| cur.test_punct(','));
+	cur.punct(',');
+
+	let cap_type = match cur.try_kw("Capture") {
+		true => {
+			cur.punct(':');
+			let ty = cur.eat_until_non_empty("a type", |cur| cur.test_punct(','));
+			cur.punct(',');
+			ty.map_or(CapType::Inherited, CapType::Explicit)
+		}
+		false => CapType::Inherited,
+	};
+
+	let expr = parse_expr(cur);
+	let map = match cur.try_multi_punct(['=', '>']) {
+		true => cur.eat_until_non_empty("a expression", |cur| cur.is_end()),
+		false => None,
+	};
+	if !cur.is_end() {
 		err!(cur, "expected end of input");
 	}
 
-	let cap = Capture { ident: ident!("root"), map, expr, ..Default::default() };
+	let cap =
+		Capture { ident: ident!("root"), expr, ty: cap_type, map, ..Default::default() };
 
 	Matcher { matched_type, cap }
 }

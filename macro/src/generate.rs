@@ -797,12 +797,12 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 		# #[derive(Debug)]
 		pub struct #matcher_ident
 		#if !args.is_empty() #{
-			<#for arg in args #{
+			<#for arg in &args_t #{
 				#arg: __Matcher<#matched_type>,
 			}>
-			(#for arg in args #{ #arg, })
+			(#for arg in &args_t #{ #arg, })
 		};
-		#do { gen_matcher_impl(stream, &matcher_ident, &term.cap, matched_type, args,
+		#do { gen_matcher_impl(stream, &matcher_ident, &term.cap, matched_type, &args_t,
 			|mut stream, in_matcher| chunk!(stream,
 				#if !args.is_empty() #{
 					let Self(#for arg in args #{ #arg, }) = self;

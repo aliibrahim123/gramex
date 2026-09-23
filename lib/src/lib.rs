@@ -119,6 +119,8 @@ extern crate std as alloc_crate;
 pub mod gram_ref;
 
 mod core;
+#[cfg(feature = "macros")]
+mod core_macros;
 pub mod cursor;
 pub mod general;
 pub mod result;
@@ -134,7 +136,7 @@ pub mod modes {
 pub mod __private;
 
 #[cfg(feature = "macros")]
-pub use gramex_macro::{check, grammar, matcher, matches, parse, try_match};
+pub use core_macros::*;
 
 #[cfg(feature = "bits")]
 pub mod bits;

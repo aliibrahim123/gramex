@@ -70,7 +70,7 @@ pub fn matcher(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	// parse
 	let mut errors = Vec::new();
 	let mut cur = Cursor::new(input.into(), Span::call_site(), &mut errors);
-	let mut matcher = parse_matcher(&mut cur, false);
+	let mut matcher = parse_matcher(&mut cur);
 
 	// analyze
 	let mut ctx = capture::Context {
