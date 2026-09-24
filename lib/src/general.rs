@@ -285,7 +285,7 @@ impl<
 #[doc(hidden)]
 pub trait LifedMatchFn<'src, T: MatchAble + ?Sized + 'src> {
 	type Capture: 'src;
-	type Res: IntoResult<Output = Self::Capture>;
+	type Res: IntoResult<Success = Self::Capture>;
 	fn call(&self, matched: &'src T, off: &mut usize) -> Self::Res;
 }
 
@@ -293,9 +293,9 @@ impl<'src, T: MatchAble + ?Sized + 'src, R, F> LifedMatchFn<'src, T> for F
 where
 	F: Fn(&'src T, &mut usize) -> R,
 	R: IntoResult,
-	<R as IntoResult>::Output: 'src,
+	<R as IntoResult>::Success: 'src,
 {
-	type Capture = <R as IntoResult>::Output;
+	type Capture = <R as IntoResult>::Success;
 	type Res = R;
 
 	fn call(&self, matched: &'src T, off: &mut usize) -> R {
