@@ -220,7 +220,7 @@ fn parse_atom_common(cur: &mut Cursor) -> Option<Atom> {
 		let matcher = match block.stream().into_iter().next() {
 			// transform clojure into `MathFn`
 			Some(TokenTree::Punct(punct)) if punct.as_char() == '|' => {
-				token!((::gramex::general::MatchFn::new_with_infer(#{block.stream()})))
+				token!((::gramex::general::MatchFn::new_infer(#{block.stream()})))
 			}
 			_ => block.into(),
 		};

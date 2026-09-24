@@ -1,4 +1,4 @@
-//! items for general [`MatchResult`] and its [`MatchError`].
+//! items for a general [`MatchResult`] and its [`MatchError`].
 
 use crate::Mode;
 use alloc_crate::vec::Vec;
@@ -338,11 +338,11 @@ pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;
 ///
 /// the implementing types are:
 ///
-/// | type                      | `Ok` | `Err`                                                          |
-/// | ------------------------- | ---- | -------------------------------------------------------------- |
-/// | [`bool`]                  | `()` | [`MatchError::mismatch(Expected::None)`](MatchError::mismatch) |
-/// | [`Option<T>`]             | `T`  | [`MatchError::mismatch(Expected::None)`](MatchError::mismatch) |
-/// | [`Result<T, MatchError>`] | `T`  | [`MatchError`]                                                 |
+/// | type             | `Ok`          | `Err`                                                          |
+/// | ---------------- | ------------- | -------------------------------------------------------------- |
+/// | [`bool`]         | `()`          | [`MatchError::mismatch(Expected::None)`](MatchError::mismatch) |
+/// | [`Option<T>`]    | `T` in `Some` | [`MatchError::mismatch(Expected::None)`](MatchError::mismatch) |
+/// | [`Result<T, MatchError>`] | `T` in `Ok` | [`MatchError`] in `Err`                                 |
 ///
 /// # example
 /// ```
