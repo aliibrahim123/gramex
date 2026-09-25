@@ -195,32 +195,42 @@ fn gen_expected(
 	}
 }
 
-/// generate expression evaluating to `MatchError` for a `!atom`
-fn gen_error_not(
-	mut stream: &mut TokenStream, atom: &Atom, is_incomplete: impl ToTokens,
-	ctx: &Context,
+/// generate error logic
+fn gen_error(
+	mut stream: &mut TokenStream, ctx: &Context, err: impl Fn(&mut TokenStream),
 ) {
-	if ctx.mode.error {
-		chunk!(stream, break #{ctx.label} #{ctx.mode}::err(|| __::MatchError::expected(
-			__::expected_not(&#do {
-				gen_expected_atom(stream, atom,  ctx.expected_fuel - 1, ctx.matched_type);
-			}),
-			#is_incomplete, *__orig
-		)));
+	if ctx.mode.error && ctx.matched_type.is_some() {
+		chunk!(stream, break #{ctx.label} #{ctx.mode}::err(|| #do { err(stream) }));
+	} else if ctx.mode.error {
+		chunk!(stream, break #{ctx.label} #{ctx.mode}::err(|| 
+			__::MatchError::mismatch(__::Expected::SomeThing, *__off)
+		); );
 	} else {
 		chunk!(stream, break #{ctx.label} Err(()); );
 	}
 }
-/// generate expression evaluating to `MatchError` for a [`Expr::Or`]
-fn gen_error_or(mut stream: &mut TokenStream, exprs: &[Expr], ctx: &Context) {
-	if ctx.mode.error {
-		chunk!(stream, break #{ctx.label} #{ctx.mode}::err( || __::MatchError::expected(
+
+/// generate error logic for a `!atom`
+fn gen_error_not(
+	stream: &mut TokenStream, atom: &Atom, is_incomplete: impl ToTokens, ctx: &Context,
+) {
+	gen_error(stream, ctx, |stream| {
+		chunk!(stream, __::MatchError::expected(
+			__::expected_not(&#do {
+				gen_expected_atom(stream, atom,  ctx.expected_fuel - 1, ctx.matched_type);
+			}),
+			#is_incomplete, *__orig,
+		))
+	});
+}
+/// generate error logic for a [`Expr::Or`]
+fn gen_error_or(stream: &mut TokenStream, exprs: &[Expr], ctx: &Context) {
+	gen_error(stream, ctx, |stream| {
+		chunk!(stream, __::MatchError::expected(
 			#do { gen_expected_or(stream, exprs, ctx.expected_fuel - 1, ctx.matched_type) },
-			*__off == <_ as __MatchAble>::len(__value), __start
-		)));
-	} else {
-		chunk!(stream, break #{ctx.label} Err(()); );
-	}
+			*__off == <_ as __MatchAble>::len(__value), __start,
+		))
+	});
 }
 /// generate expression evaluating to `Matcher` for a [`Atom::Call`] argument
 fn gen_call_matcher(stream: &mut TokenStream, arg: &Matcher) {
@@ -905,7 +915,7 @@ pub fn gen_cursor_op(
 		}
 
 		#match op {
-			CursorOp::Eat => #{ __res },
+			CursorOp::Eat => #{ __res.map_err(|err| __cur.map_error(err)) },
 			CursorOp::TryEat => #{ match __res {
 				Ok(res) => { *<_ as Cursor>::off_mut(__cur) = *__off; Some(res) },
 				Err(err) => None,
