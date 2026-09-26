@@ -30,7 +30,7 @@ use crate::result::{Expected, MatchError, MatchResult};
 ///     // ...
 /// }
 /// // most `MatchAble`s are actually slices
-/// #[derive(PartialEq)]
+/// #[derive(Debug)]
 /// struct Tokens<'src>(&'src [Token]);
 /// impl MatchAble for Tokens<'_> {
 ///     type Token<'src> = Token where Self: 'src;
@@ -49,7 +49,7 @@ use crate::result::{Expected, MatchError, MatchResult};
 ///
 /// for slice based types, `MatchAble` can be automatically generated with extra [`Matcher`]s by [`derive_slice_matchable!`](crate::derive::derive_slice_matchable).
 /// ```
-/// gramex::derive::derive_slice_matchable!(Tokens(&[Token]), true);
+/// gramex::derive::derive_slice_matchable!(Tokens(&[Token]), matchers: true, expected: Debug);
 /// ```
 ///
 /// # built-in `MatchAble` types
@@ -58,7 +58,7 @@ use crate::result::{Expected, MatchError, MatchResult};
 /// - `[u8]` though [`bytes` module](crate::bytes) and `bytes` feature flag.
 /// - bitfields though [`bits` module](crate::bits) and `bits` feature flag.
 pub trait MatchAble {
-	/// a single token of the `Matchable`` created by [`get_token`](Self::get_token).
+	/// a single token of the `Matchable` created by [`get_token`](Self::get_token).
 	///
 	/// `Token` can be [`Copy`], referece or anything.
 	///
@@ -78,7 +78,7 @@ pub trait MatchAble {
 	where
 		Self: 'src;
 
-	/// the length of the `Matchable``
+	/// the length of the `Matchable`
 	///
 	/// the length must be stable during matching and signal the end of input when the offset hit it.
 	///

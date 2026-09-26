@@ -659,23 +659,28 @@ pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
 /// `derive_enum_matcher` macro args
 ///
 /// grammer: `
-///     '#' '[' derive_enum_matcher '(' "for" matched_type:type ')' ']'
+///     '#' '[' "derive_enum_matcher" '('
+///         "for" matched_type:type (',' "field" '=' field:expr)?
+///         (',' "expected" '=' expected:expr)?
+///     ')' ']'
 ///     "enum" name:ident "{" vars:list<variant, ','> "}"
 /// `  
 #[derive(Debug)]
 pub struct EnumMatcher {
 	pub name: Ident,
 	pub matched_type: TokenStream,
+	pub field: TokenStream,
+	pub expected: Option<TokenStream>,
 	pub vars: Vec<Variant>,
 }
 
 /// enum variant
 ///
-/// grammer: `name:ident` ('(' inner:type ')')? !','*
+/// grammer: `name:ident` ('(' fields:list<type, ','> ')')? !','*
 #[derive(Debug)]
 pub struct Variant {
 	pub name: Ident,
-	pub inner: Option<TokenStream>,
+	pub fields: Option<Vec<TokenStream>>,
 }
 
 /// skip generic arguments
@@ -696,39 +701,81 @@ fn skip_generics(cur: &mut Cursor) -> bool {
 	true
 }
 
-/// try parse `type ','?` spaning the whole cursor
-fn try_lonely_type(mut cur: Cursor) -> Option<TokenStream> {
-	let ty = cur.eat_until(|cur| {
-		if skip_generics(cur) {
-			cur.ind -= 1;
+/// parse enum variant fields
+fn parse_var_fields(mut cur: Cursor) -> Vec<TokenStream> {
+	let mut fields = Vec::new();
+	let mut last_ind = 0;
+	while !cur.is_end() {
+		if cur.test_punct(',') {
+			fields.push(cur.tokens[last_ind..cur.ind].iter().cloned().collect());
+			cur.skip();
+			last_ind = cur.ind;
+		} else if !skip_generics(&mut cur) {
+			cur.skip();
 		}
-		cur.test_punct(',')
-	});
-
-	cur.try_punct(',');
-	cur.is_end().then_some(ty)
+	}
+	if last_ind < cur.tokens.len() {
+		fields.push(cur.tokens[last_ind..].iter().cloned().collect());
+	}
+	fields
 }
+
 /// parse enum [`Variant`]s
 fn parse_enum_variants(cur: &mut Cursor) -> Option<Vec<Variant>> {
 	let mut vars_cur = cur.enter_group(Brace)?;
 	let mut vars = Vec::new();
 	while !vars_cur.is_end() {
 		if let Some(name) = vars_cur.ident() {
-			let inner = vars_cur.try_enter_group(Parenthesis).and_then(try_lonely_type);
-			vars.push(Variant { name, inner });
+			let fields = vars_cur.try_enter_group(Parenthesis).map(parse_var_fields);
+			vars.push(Variant { name, fields });
 		}
 		// skip the rest of variant syntax
 		vars_cur.eat_until(|cur| cur.try_punct(','));
 	}
 	Some(vars)
 }
+
+/// parse enum [`EnumMatcher`] attribute meta
+fn parse_enum_matcher_attr(
+	cur: &mut Cursor,
+) -> (TokenStream, TokenStream, Option<TokenStream>) {
+	cur.kw("for");
+	let matched_type = cur
+		.eat_until_non_empty("a type", |cur| {
+			if skip_generics(cur) {
+				cur.ind -= 1;
+			}
+			cur.test_punct(',')
+		})
+		.unwrap_or_default();
+	cur.try_punct(',');
+
+	let mut field = TokenStream::new();
+	if cur.try_kw("field") {
+		cur.punct('=');
+		field = cur
+			.eat_until_non_empty("an expression", |cur| cur.test_punct(','))
+			.unwrap_or_default();
+	}
+	cur.try_punct(',');
+	let expected = cur.try_kw("expected").then(|| {
+		cur.punct('=');
+		cur.eat_until_non_empty("a path", |_| false)
+	});
+
+	if !cur.is_end() {
+		cur.expected("end of input");
+	}
+
+	(matched_type, field, expected.flatten())
+}
+
 /// parse [`EnumMatcher`]
 pub fn parse_enum_matcher(
 	attr: TokenStream, item: TokenStream, errors: &mut Vec<Error>,
 ) -> Option<EnumMatcher> {
 	let mut attr_cur = Cursor::new(attr, Span::call_site(), errors);
-	attr_cur.kw("for");
-	let matched_type = attr_cur.eat_until_non_empty("a type", |_| false)?;
+	let (matched_type, field, expected) = parse_enum_matcher_attr(&mut attr_cur);
 
 	let mut item_cur = Cursor::new(item, Span::call_site(), errors);
 	// skip attrs and visibility
@@ -748,5 +795,5 @@ pub fn parse_enum_matcher(
 	skip_generics(&mut item_cur);
 
 	let vars = parse_enum_variants(&mut item_cur)?;
-	Some(EnumMatcher { name, matched_type, vars })
+	Some(EnumMatcher { name, matched_type, field, expected, vars })
 }

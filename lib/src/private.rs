@@ -6,6 +6,8 @@ pub use core::convert::{Infallible, Into};
 pub use core::marker::PhantomData;
 pub use core::option::Option;
 
+pub use lean_string::LeanString;
+
 pub use crate::cursor::Cursor;
 pub use crate::result::{Expected, MatchError, MatchResult};
 

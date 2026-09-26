@@ -1,3 +1,50 @@
+//! [`str`] matching implementation
+//!
+//! when `str` feature is enabled, [`str`] matching get enabled and with additional extra [`Matcher`]s through this module.
+//!
+//! # `str` [`MatchAble`] implementation
+//!
+//! [`MatchAble`] is implemented for [`str`] where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`](char) and offsets are byte indexes of [`str`].
+//!
+//! ```
+//! assert_eq!(MatchAble::len("abc"), 3);
+//! assert_eq!(MatchAble::slice("abc", 1..3), Some("bc"));
+//! assert_eq!(MatchAble::slice("abc", 1..4), None);
+//! assert_eq!(MatchAble::get_token("abc", 2), Some('c'));
+//! assert_eq!(MatchAble::get_token("abc", 3), None);
+//! let mut off = 0;
+//! assert!(MatchAble::skip_n::<Test>("abc", &mut off, 2).is_ok());
+//! assert_eq!(off, 2);
+//! ```
+//!
+//! # core [`Matcher`]s
+//!
+//! the core [`Matcher`]s for [`str`] are: [`str`], [`char`], [`RangeInclusive<char>`] for range matching, [`String`], and [`Cow<str>`].
+//!
+//! in addition to `&str`, [`Box<str>`], [`Rc<str>`](alloc_crate::rc::Rc) and [`Arc<str>`](alloc_crate::sync::Arc) that are common to all [`MatchAble`]s.
+//!
+//! these [`Matcher`]s matches with the [`str`] slice they matched.
+//!
+//! ```
+//! assert_eq!(parse("abc", "abc"), Ok("abc"));
+//! assert_eq!(parse("abd", "abc"), Err(MatchError::mismatch("\"abc\"".into(), 0)));
+//! assert_eq!(parse("ab", "abc"), Err(MatchError::incomplete("\"abc\"".into(), 0)));
+//! assert!(matches("a", 'a'));
+//! assert!(matches("a", 'a'..='z'));
+//! assert!(matches("abc", String::from("abc")));
+//! assert!(matches("abc", Box::new("abc")));
+//! ```
+//! # pattern [`Matcher`]s
+//!
+//! the `str` module export multiple [`Matcher`]s that matches characters of common kinds and patterns, like [`alpha`], [`ws`], [`lower`], [`hex`]...
+//!
+//! ```
+//! assert!(matches("a", alpha));
+//! assert!(matches("1", num));
+//! assert!(matches(" ", ws));
+//! assert!(matches!("1aF", hex[3]));
+//! ```
+
 use alloc_crate::{borrow::Cow, string::String};
 use core::{
 	fmt::{Display, Write},

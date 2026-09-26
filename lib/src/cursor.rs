@@ -80,8 +80,9 @@
 //!     Eq
 //!     // ..
 //! }
+//! #[derive(Debug)]
 //! struct Tokens<'src>(&'src [Token]);
-//! derive_slice_matchable!(Tokens(&[Token]), true);
+//! derive_slice_matchable!(Tokens(&[Token]), matchers: true, expected: Debug);
 //! type MyCursor<'src> = SimpleCursor<'src, Tokens>;
 //!
 //! let mut cur = MyCursor::new(&Tokens(&[Token::Nb(1), Token::Add, Token::Nb(2)]));
@@ -129,7 +130,7 @@ pub use gramex_macro::eat;
 /// let body = cur:rust_expr ',' '{' arm* ("else" "=>" rust_expr)? '}';
 /// ```
 ///
-/// the `match_map` macro takes the [`Cursor`] and a list of `(pat => map)` arms, and optionally an `else` arm at the end, and evaluate to the type of `map`.
+/// the `match_map` macro takes the [`Cursor`] and a list of `pat => map` arms, and optionally an `else` arm at the end, and evaluate to the type of `map`.
 ///
 /// it try match atomicly each `pat` in order with [`Capture`](crate::modes::Capture) [`Mode`], on first match, its `map` expression get evaluated as a result with [captures](crate::gram_ref#captures) binded by their name.
 ///
@@ -142,7 +143,7 @@ pub use gramex_macro::eat;
 ///         'a' => Case::A,
 ///         'b' c1:_ ',' c2:_ => Case::B(c1, c2),
 ///         'd' | 'e' => Case::D_E,
-///         else => Case:F,
+///         else => Case::F,
 ///     })
 /// }
 /// assert_eq!(map(&mut SimpleCursor::new("a")), Case::A);
@@ -521,7 +522,7 @@ pub trait Cursor<'src> {
 
 	/// generate a [`MatchError`] with the given [`Expected`].
 	///
-	/// the generated [mismatch](crate::result::MatchErrorKind::MisMatch) or [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] depending if the `Cursor` is at the end of the input, then it get mapped by [`Cursor::map_error`].
+	/// the generated [mismatch](crate::result::MatchErrorKind::MisMatch) or [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] depending if the `Cursor` is at the end of the input, then it get mapped by [`map_error`](Self::map_error).
 	///
 	/// # example
 	/// ```

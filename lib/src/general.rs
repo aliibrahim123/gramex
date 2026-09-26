@@ -286,8 +286,11 @@ pub mod matchers {
 
 	use lean_string::LeanString;
 
+	#[allow(clippy::wildcard_imports)]
 	use crate::{
-		Expected, MatchAble, MatchError, MatchResult, Matcher, Mode, general::*,
+		MatchAble, Matcher, Mode,
+		general::*,
+		result::{Expected, MatchError, MatchResult},
 	};
 
 	/// [`end`] [`Matcher`]
