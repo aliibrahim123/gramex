@@ -4,7 +4,7 @@
 //!
 //! # `str` [`MatchAble`] implementation
 //!
-//! [`MatchAble`] is implemented for [`str`] where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`](char) and offsets are byte indexes of [`str`].
+//! [`MatchAble`] is implemented for [`str`] where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`] and offsets are byte indexes of [`str`].
 //!
 //! ```
 //! assert_eq!(MatchAble::len("abc"), 3);
@@ -56,6 +56,7 @@ use crate::{
 	MatchAble, Matcher, Mode,
 	derive::{define_ref_matcher, define_token_matcher, match_token},
 	result::{Expected, MatchError, MatchResult},
+	str::matchers::Digit,
 };
 
 impl MatchAble for str {
@@ -107,6 +108,7 @@ impl Matcher<str> for str {
 	}
 }
 
+/// transform `a` into `"a"`
 fn wrap_with_quotes(a: impl Display) -> LeanString {
 	let mut str = LeanString::new();
 	write!(str, "\"{a}\"").unwrap();
@@ -126,146 +128,204 @@ define_token_matcher!(RangeInclusive<char>, str, |matcher, char| (
 	Expected::Between(wrap_with_quotes(matcher.start()), wrap_with_quotes(matcher.end()),)
 ));
 
-macro_rules! define_pattern_matcher {
-	($name:ident, $matcher:ident, |$char:ident| $logic:expr, $kind:literal) => {
-		#[derive(Debug, Clone, Copy, PartialEq)]
-		#[doc(hidden)]
-		#[allow(nonstandard_style)]
-		pub struct $matcher;
-		#[allow(nonstandard_style)]
-		pub const $name: $matcher = $matcher;
-		define_token_matcher!($matcher, str, |_matcher, $char| (
-			$logic.then_some($char.len_utf8()),
-			Expected::A(LeanString::from_static_str($kind))
-		));
+macro_rules! define_char_patterns {
+	[$((
+		$name:ident, $matcher:ident, by: |$char:ident| $logic:expr, kind: $kind:literal,
+		satisfy: $satisfy:literal,
+		$(ascii_equiv: $ascii_equiv:literal, )? $(unicode_equiv: $unicode_equiv:literal, )?
+		match_1: $match_1:literal, match_2: $match_2:literal, mismatch: $mismatch:literal
+	)),+] => {
+		$(
+			#[doc = concat!(
+				"matches ", $kind, ".\n\n",
+				"`", stringify!($name), "` is a [`Matcher`] that matches a character satisfing ",
+				$satisfy, ", and capture it as `str` slice.\n\n",
+				$("this is unicode aware, for ascii only version, see [`", $ascii_equiv, "`].\n\n",)?
+				$("this is ascii only, for unicode aware version, see [`", $unicode_equiv, "`].\n\n",)?
+				"# example \n\n```\n",
+				"assert_eq!(try_match(\"", $match_1, "\", ", stringify!($name), "), Some(\"",
+				$match_1, "\"));\n",
+				"assert!(matches(\"", $match_2, "\", ", stringify!($name), "));\n",
+				"assert!(!matches(\"", $mismatch, "\", ", stringify!($name), "));\n",
+				"assert!(!matches(\"\", ", stringify!($name), "));\n",
+				"```"
+			)]
+			#[allow(nonstandard_style)]
+			pub const $name: matchers::$matcher = matchers::$matcher;
+		)+
+
+		mod char_pattern_matchers {
+			use crate::result::Expected;
+			use lean_string::LeanString;
+			$(
+				#[doc = concat!(
+					"[", stringify!($name), "](crate::str::", stringify!($name), ")",
+					" [`Matcher`](crate::Matcher).")
+				]
+				#[derive(Debug, Clone, Copy, PartialEq)]
+				#[allow(nonstandard_style)]
+				pub struct $matcher;
+				crate::derive::define_token_matcher!($matcher, str, |_matcher, $char| (
+					$logic.then_some($char.len_utf8()),
+					Expected::A(LeanString::from_static_str($kind))
+				));
+			)+
+		}
 	};
 }
 
-define_pattern_matcher!(
-	upper,
-	upper_M,
-	|char| char.is_uppercase(),
-	"an uppercase character"
-);
-define_pattern_matcher!(
-	lower,
-	lower_M,
-	|char| char.is_lowercase(),
-	"a lowercase character"
-);
-define_pattern_matcher!(
-	alpha,
-	alpha_M,
-	|char| char.is_alphabetic(),
-	"an alphabetic character"
-);
-define_pattern_matcher!(num, num_M, |char| char.is_numeric(), "a numeric character");
-define_pattern_matcher!(
-	alphanum,
-	alphanum_M,
-	|char| char.is_alphanumeric(),
-	"an alphanumeric character"
-);
-define_pattern_matcher!(ws, ws_M, |char| char.is_whitespace(), "a whitespace character");
-define_pattern_matcher!(
-	control,
-	control_M,
-	|char| char.is_control(),
-	"a control character"
-);
-define_pattern_matcher!(ascii, ascii_M, |char| char.is_ascii(), "an ascii character");
-define_pattern_matcher!(
-	ascii_upper,
-	ascii_upper_M,
-	|char| char.is_ascii_uppercase(),
-	"an ascii uppercase character"
-);
-define_pattern_matcher!(
-	ascii_lower,
-	ascii_lower_M,
-	|char| char.is_ascii_lowercase(),
-	"an ascii lowercase character"
-);
-define_pattern_matcher!(
-	ascii_alpha,
-	ascii_alpha_M,
-	|char| char.is_ascii_alphabetic(),
-	"an ascii alphabetic character"
-);
-define_pattern_matcher!(
-	ascii_alphanum,
-	ascii_alphanum_M,
-	|char| char.is_ascii_alphanumeric(),
-	"an ascii alphanumeric character"
-);
-define_pattern_matcher!(
-	ascii_ws,
-	ascii_ws_M,
-	|char| char.is_ascii_whitespace(),
-	"an ascii whitespace character"
-);
-define_pattern_matcher!(
-	ascii_control,
-	ascii_control_M,
-	|char| char.is_ascii_control(),
-	"an ascii control character"
-);
-define_pattern_matcher!(
-	ascii_printable,
-	ascii_printable_M,
-	|char| char.is_ascii_graphic(),
-	"an ascii printable character"
-);
-define_pattern_matcher!(
-	ascii_punct,
-	ascii_punct_M,
-	|char| char.is_ascii_punctuation(),
-	"an ascii punctuation character"
-);
-define_pattern_matcher!(dec, dec_M, |char| matches!(char, '0'..='9'), "a decimal digit");
-define_pattern_matcher!(
-	hex,
-	hex_M,
-	|char| matches!(char, '0'..='9' | 'a'..='f' | 'A'..='F'),
-	"a hexadecimal digit"
-);
-define_pattern_matcher!(
-	hex_lower,
-	hex_lower_M,
-	|char| matches!(char, '0'..='9' | 'a'..='f'),
-	"a lower hexadecimal digit"
-);
-define_pattern_matcher!(
-	hex_upper,
-	hex_upper_M,
-	|char| matches!(char, '0'..='9' | 'A'..='F'),
-	"an upper hexadecimal digit"
-);
-define_pattern_matcher!(bin, bin_M, |char| matches!(char, '0'..='1'), "a binary digit");
-define_pattern_matcher!(
-	octal,
-	octal_M,
-	|char| matches!(char, '0'..='7'),
-	"an octal digit"
-);
+define_char_patterns![
+	(
+		upper, Upper, by: |char| char.is_uppercase(),
+		kind: "an uppercase character", satisfy: "[`char::is_uppercase`]",
+		ascii_equiv: "ascii_upper",
+		match_1: "A", match_2: "Z", mismatch: "a"
+	), (
+		lower, Lower, by: |char| char.is_lowercase(),
+		kind: "a lowercase character", satisfy: "[`char::is_lowercase`]",
+		ascii_equiv: "ascii_lower",
+		match_1: "a", match_2: "z", mismatch: "A"
+	), (
+		num, Num, by: |char| char.is_numeric(),
+		kind: "a numeric character", satisfy: "[`char::is_numeric`]",
+		ascii_equiv: "dec",
+		match_1: "1", match_2: "9", mismatch: "a"
+	), (
+		alpha, Alpha, by: |char| char.is_alphabetic(),
+		kind: "an alphabetic character", satisfy: "[`char::is_alphabetic`]",
+		ascii_equiv: "ascii_alpha",
+		match_1: "a", match_2: "Z", mismatch: "1"
+	), (
+		alphanum, Alphanum, by: |char| char.is_alphanumeric(),
+		kind: "an alphanumeric character", satisfy: "[`char::is_alphanumeric`]",
+		ascii_equiv: "ascii_alphanum",
+		match_1: "a", match_2: "9", mismatch: " "
+	), (
+		ws, Ws, by: |char| char.is_whitespace(),
+		kind: "a whitespace character", satisfy: "[`char::is_whitespace`]",
+		ascii_equiv: "ascii_ws",
+		match_1: " ", match_2: "\t", mismatch: "a"
+	), (
+		control, Control, by: |char| char.is_control(),
+		kind: "a control character", satisfy: "[`char::is_control`]",
+		ascii_equiv: "ascii_control",
+		match_1: "\n", match_2: "\0", mismatch: "a"
+	), (
+		ascii, Ascii, by: |char| char.is_ascii(),
+		kind: "an ascii character", satisfy: "[`char::is_ascii`]",
+		match_1: "a", match_2: "Z", mismatch: "λ"
+	), (
+		ascii_upper, AsciiUpper, by: |char| char.is_ascii_uppercase(),
+		kind: "an ascii uppercase character", satisfy: "[`char::is_ascii_uppercase`]",
+		unicode_equiv: "upper",
+		match_1: "A", match_2: "Z", mismatch: "a"
+	), (
+		ascii_lower, AsciiLower, by: |char| char.is_ascii_lowercase(),
+		kind: "an ascii lowercase character", satisfy: "[`char::is_ascii_lowercase`]",
+		unicode_equiv: "lower",
+		match_1: "a", match_2: "z", mismatch: "A"
+	), (
+		ascii_alpha, AsciiAlpha, by: |char| char.is_ascii_alphabetic(),
+		kind: "an ascii alphabetic character", satisfy: "[`char::is_ascii_alphabetic`]",
+		unicode_equiv: "alpha",
+		match_1: "a", match_2: "Z", mismatch: "1"
+	), (
+		ascii_alphanum, AsciiAlphanum, by: |char| char.is_ascii_alphanumeric(),
+		kind: "an ascii alphanumeric character", satisfy: "[`char::is_ascii_alphanumeric`]",
+		unicode_equiv: "alphanum",
+		match_1: "a", match_2: "9", mismatch: " "
+	), (
+		ascii_ws, AsciiWs, by: |char| char.is_ascii_whitespace(),
+		kind: "an ascii whitespace character", satisfy: "[`char::is_ascii_whitespace`]",
+		unicode_equiv: "ws",
+		match_1: " ", match_2: "\t", mismatch: "a"
+	), (
+		ascii_control, AsciiControl, by: |char| char.is_ascii_control(),
+		kind: "an ascii control character", satisfy: "[`char::is_ascii_control`]",
+		unicode_equiv: "control",
+		match_1: "\n", match_2: "\0", mismatch: "a"
+	), (
+		ascii_printable, AsciiPrintable, by: |char| char.is_ascii_graphic(),
+		kind: "an ascii printable character", satisfy: "[`char::is_ascii_graphic`]",
+		match_1: "a", match_2: "!", mismatch: " "
+	), (
+		ascii_punct, AsciiPunct, by: |char| char.is_ascii_punctuation(),
+		kind: "an ascii punctuation character", satisfy: "[`char::is_ascii_punctuation`]",
+		match_1: "!", match_2: "#", mismatch: "a"
+	), (
+		dec, Dec, by: |char| matches!(char, '0'..='9'),
+		kind: "a decimal digit", satisfy: "`'0'..'9'",
+		match_1: "0", match_2: "9", mismatch: "a"
+	), (
+		hex, Hex, by: |char| matches!(char, '0'..='9' | 'a'..='f' | 'A'..='F'),
+		kind: "a hexadecimal digit", satisfy: "`'0'..'9' | 'a'..'f' | 'A'..'F'`",
+		match_1: "9", match_2: "f", mismatch: "g"
+	), (
+		hex_lower, HexLower, by: |char| matches!(char, '0'..='9' | 'a'..='f'),
+		kind: "a lower hexadecimal digit", satisfy: "`'0'..'9' | 'a'..'f'`",
+		match_1: "9", match_2: "f", mismatch: "F"
+	), (
+		hex_upper, HexUpper, by: |char| matches!(char, '0'..='9' | 'A'..='F'),
+		kind: "an upper hexadecimal digit", satisfy: "`'0'..'9' | 'A'..'F'`",
+		match_1: "9", match_2: "F", mismatch: "f"
+	), (
+		bin, Bin, by: |char| matches!(char, '0' | '1'),
+		kind: "a binary digit", satisfy: "`'0' | '1'`",
+		match_1: "0", match_2: "1", mismatch: "2"
+	), (
+		octal, Octal, by: |char| matches!(char, '0'..='7'),
+		kind: "an octal digit", satisfy: "`'0'..'7'`",
+		match_1: "0", match_2: "7", mismatch: "8"
+	)
+];
 
+/// matches a digit character of given `radix`.
+///
+/// `digit` create a [`Matcher`] that matches a character that is a digit of `radix` between `2` and `36` inclusive.
+///
+/// it is based on [`char::is_digit`], and capture the character `str` slice.
+///
+/// # example
+/// ```
+/// assert_eq!(try_match("1", digit(10)), Some("1"));
+/// assert!(!matches("g", digit(10)));
+/// assert!(matches("g", digit(20)));
+/// assert!(!matches("+", digit(36)));
+/// ```
 pub fn digit(radix: u8) -> Digit {
 	assert!(radix >= 2 && radix <= 36);
 	Digit(radix)
 }
-pub struct Digit(u8);
-impl Matcher<str> for Digit {
-	type Capture<'src> = &'src str;
-	fn do_match<'src, M: Mode>(
-		&self, matched: &'src str, off: &mut usize,
-	) -> MatchResult<&'src str, M> {
-		let matcher =
-			|char: char| char.is_digit(self.0 as u32).then_some(char.len_utf8());
-		match_token::<M, _>(matched, off, matcher, || self.expected())
-	}
-	fn expected(&self) -> Expected {
-		let mut buf = LeanString::new();
-		write!(buf, "a base-{} digit", self.0).unwrap();
-		Expected::A(buf)
+
+/// [str](crate::str) items [`Matcher`]s
+pub mod matchers {
+	use core::fmt::Write;
+	use lean_string::LeanString;
+
+	use crate::{
+		Matcher, Mode,
+		derive::match_token,
+		result::{Expected, MatchResult},
+	};
+
+	#[doc(inline)]
+	pub use super::char_pattern_matchers::*;
+
+	/// [`digit`](crate::str::digit) [`Matcher`].
+	pub struct Digit(pub(crate) u8);
+	impl Matcher<str> for Digit {
+		type Capture<'src> = &'src str;
+		fn do_match<'src, M: Mode>(
+			&self, matched: &'src str, off: &mut usize,
+		) -> MatchResult<&'src str, M> {
+			let matcher =
+				|char: char| char.is_digit(self.0 as u32).then_some(char.len_utf8());
+			match_token::<M, _>(matched, off, matcher, || self.expected())
+		}
+		fn expected(&self) -> Expected {
+			let mut buf = LeanString::new();
+			write!(buf, "a base-{} digit", self.0).unwrap();
+			Expected::A(buf)
+		}
 	}
 }

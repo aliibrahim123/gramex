@@ -165,4 +165,4 @@ pub use gramex_macro::parse;
 pub use gramex_macro::try_match;
 
 #[allow(unused)]
-pub use crate::{result::*, *};
+use crate::{result::*, *};
