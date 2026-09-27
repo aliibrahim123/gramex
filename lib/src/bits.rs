@@ -108,37 +108,39 @@ macro_rules! float_conv {
 }
 float_conv![f32, f64];
 
-impl<const N: usize> From<[u8; N]> for Bits {
-	#[inline]
-	fn from(value: [u8; N]) -> Self {
-		assert!(N <= 8);
+impl Bits {
+	pub(crate) fn from_le_slice(value: &[u8]) -> Self {
 		let mut buf = [0u8; 8];
-		buf[..N].copy_from_slice(&value);
-		Self { value: u64::from_le_bytes(buf), len: (N * 8) as u8 }
+		buf[..value.len()].copy_from_slice(&value);
+		Self { value: u64::from_le_bytes(buf), len: (value.len() * 8) as u8 }
 	}
-}
-impl<const N: usize> TryFrom<Bits> for [u8; N] {
-	type Error = ();
-	#[inline]
-	fn try_from(bits: Bits) -> Result<Self, Self::Error> {
-		assert!(N <= 8);
-		if bits.len > (N * 8) as u8 {
-			return Err(());
-		}
-		let mut buf = [0u8; N];
-		buf.copy_from_slice(&bits.value.to_le_bytes()[..N]);
-		Ok(buf)
-	}
-}
-impl TryFrom<&[u8]> for Bits {
-	type Error = ();
-	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-		if value.len() > 8 {
-			return Err(());
-		}
+	pub(crate) fn from_be_slice(value: &[u8]) -> Self {
 		let mut buf = [0u8; 8];
-		buf[..value.len()].copy_from_slice(value);
-		Ok(Self { value: u64::from_le_bytes(buf), len: value.len() as u8 * 8 })
+		buf[..value.len()].copy_from_slice(&value);
+		buf[..value.len()].reverse();
+		Self { value: u64::from_le_bytes(buf), len: (value.len() * 8) as u8 }
+	}
+	pub fn from_le_bytes<const N: usize>(value: [u8; N]) -> Self {
+		assert!(N <= 8);
+		Self::from_le_slice(&value)
+	}
+	pub fn from_be_bytes<const N: usize>(value: [u8; N]) -> Self {
+		assert!(N <= 8);
+		Self::from_be_slice(&value)
+	}
+	pub fn to_le_bytes<const N: usize>(self) -> Option<[u8; N]> {
+		assert!(N <= 8);
+		if self.len > (N * 8) as u8 {
+			return None;
+		}
+		Some(self.value.to_le_bytes()[..N].try_into().unwrap())
+	}
+	pub fn to_be_bytes<const N: usize>(self) -> Option<[u8; N]> {
+		assert!(N <= 8);
+		if self.len > (N * 8) as u8 {
+			return None;
+		}
+		Some(self.value.to_be_bytes()[8 - N..].try_into().unwrap())
 	}
 }
 
@@ -231,24 +233,28 @@ macro_rules! steal_bits_from {
 		)+
 	};
 }
-steal_bits_from![
-	u8, u16, u32, i8, i16, i32,
-	usize, isize, bool, f32, f64,
-	#for (const N: usize) [u8; N]
-];
+steal_bits_from![u8, u16, u32, i8, i16, i32, usize, isize, bool, f32, f64];
 
-impl TryFrom<&[u8]> for LBits {
-	type Error = ();
-	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-		Ok(LBits(Bits::try_from(value)?))
-	}
+macro_rules! steal_bytes_conv {
+	($ty:ident) => {
+		impl $ty {
+			pub fn to_le_bytes<const N: usize>(self) -> Option<[u8; N]> {
+				self.0.to_le_bytes()
+			}
+			pub fn to_be_bytes<const N: usize>(self) -> Option<[u8; N]> {
+				self.0.to_be_bytes()
+			}
+			pub fn from_be_bytes<const N: usize>(value: [u8; N]) -> $ty {
+				Bits::from_be_bytes(value).into()
+			}
+			pub fn from_le_bytes<const N: usize>(value: [u8; N]) -> $ty {
+				Bits::from_le_bytes(value).into()
+			}
+		}
+	};
 }
-impl TryFrom<&[u8]> for BBits {
-	type Error = ();
-	fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-		Ok(BBits(Bits::try_from(value)?))
-	}
-}
+steal_bytes_conv!(LBits);
+steal_bytes_conv!(BBits);
 
 macro_rules! impl_partial_eq {
 	[$(($lhs:ident :$lhs_t:ty, $rhs:ident :$rhs_t:ty) => $logic:expr),+] => {
@@ -383,8 +389,7 @@ macro_rules! impl_matching {
 			Expected::A(to_bin(*matcher as u64, 1))
 		));
 		into_bits_matchers!($ty, [
-			u8, u16, u32, i8, i16, i32,
-			#for (const N:usize) [u8; N]
+			u8, u16, u32, i8, i16, i32
 		]);
 		define_slice_matcher!(BitRange, $ty, |matcher, field| (
 			(matcher.start..=matcher.end).contains(&field.0.value),

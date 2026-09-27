@@ -1,6 +1,6 @@
 //! [`str`] matching implementation
 //!
-//! when `str` feature is enabled, [`str`] matching get enabled and with additional extra [`Matcher`]s through this module.
+//! when `str` feature is enabled, [`str`] matching get enabled with additional extra [`Matcher`]s through this module.
 //!
 //! # `str` [`MatchAble`] implementation
 //!
@@ -8,10 +8,13 @@
 //!
 //! ```
 //! assert_eq!(MatchAble::len("abc"), 3);
+//!
 //! assert_eq!(MatchAble::slice("abc", 1..3), Some("bc"));
 //! assert_eq!(MatchAble::slice("abc", 1..4), None);
+//!
 //! assert_eq!(MatchAble::get_token("abc", 2), Some('c'));
 //! assert_eq!(MatchAble::get_token("abc", 3), None);
+//!
 //! let mut off = 0;
 //! assert!(MatchAble::skip_n::<Test>("abc", &mut off, 2).is_ok());
 //! assert_eq!(off, 2);
@@ -29,8 +32,10 @@
 //! assert_eq!(parse("abc", "abc"), Ok("abc"));
 //! assert_eq!(parse("abd", "abc"), Err(MatchError::mismatch("\"abc\"".into(), 0)));
 //! assert_eq!(parse("ab", "abc"), Err(MatchError::incomplete("\"abc\"".into(), 0)));
+//!
 //! assert!(matches("a", 'a'));
 //! assert!(matches("a", 'a'..='z'));
+//!
 //! assert!(matches("abc", String::from("abc")));
 //! assert!(matches("abc", Box::new("abc")));
 //! ```
@@ -54,7 +59,7 @@ use lean_string::LeanString;
 
 use crate::{
 	MatchAble, Matcher, Mode,
-	derive::{define_ref_matcher, define_token_matcher, match_token},
+	derive::{define_ref_matcher, define_token_matcher},
 	result::{Expected, MatchError, MatchResult},
 	str::matchers::Digit,
 };
