@@ -2,7 +2,7 @@
 name = "gramex"
 description = "common language for advance parsers"
 edition = "2024"
-version = "0.2.0"
+version = "0.2.1"
 readme = "../readme.md"
 license = "MIT"
 repository = "https://github.com/aliibrahim123/gramex"
