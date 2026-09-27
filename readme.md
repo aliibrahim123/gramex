@@ -28,7 +28,7 @@ in the cursor mode, the parsing is done using unconstrained typical imperative f
 cursors are typically used with custom tokens lists, which can be automaticly derived with their own dedicated matchers.
 
 # quick showcase
-```
+```rust
 fn basics() {
     // `matches` return `true` if a value matches a pattern
     // patterns are separated by whitespace, and can be literals, paths and blocks

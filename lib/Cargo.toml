@@ -2,7 +2,7 @@
 name = "gramex"
 description = "common language for advance parsers"
 edition = "2024"
-version = "0.2.1"
+version = "0.2.2"
 readme = "../readme.md"
 license = "MIT"
 repository = "https://github.com/aliibrahim123/gramex"
@@ -25,6 +25,6 @@ bits = []
 
 
 [dependencies]
-gramex-macro = { version = "0.2.0", path = "../macro", optional = true }
+gramex-macro = { version = "0.2.1", path = "../macro", optional = true }
 lean_string = "0.7.0"
 rustc-hash = "2.1.3"
