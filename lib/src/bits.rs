@@ -1,3 +1,65 @@
+//! bits matching implementation
+//!
+//! when `bits` feature is enabled, bits matching get enabled with additional extra [`Matcher`]s through this module.
+//!
+//! # [`Bits`]
+//! [`Bits`] is the core structure in bit matching, it represend a bitfield of maximum 64 bits.
+//!
+//! [`Bits`] can be converted from and to all integer types, byte arrays and bools.
+//!
+//! it is created through [`b`] function.
+//!
+//! ```
+//! assert_eq!(b(3, 0b101), Bits { value: 0b101, len: 3 });
+//! assert_eq!(Bits::from(0x1234u16), b(16, 0x1234));
+//! assert_eq!(u32::try_from(b(32, 0x1234)), Ok(0x1234));
+//! assert_eq!(b(5, 0b10101), 0b10101u64);
+//! ```
+//!
+//! # [`MatchAble`] implementation
+//! bit matching is done through 2 [`Bits`] wrappers: [`BBits`] and [`LBits`], for big endian and little endian directions respectively.
+//!
+//! [`MatchAble`] is implemented for each where [`Slice`](MatchAble::Slice) is [`LBits`]/[`BBits`], [`Token`](MatchAble) is [`bool`], and offsets are bit position.
+//!
+//! ```
+//! let bits = LBits::new(5, 0b10101);
+//! assert_eq!(MatchAble::len(&bits), 5);
+//!
+//! assert_eq!(MatchAble::slice(&bits, 1..3), Some(LBits::new(2, 0b10)));
+//! assert_eq!(MatchAble::slice(&bits, 4..6), None);
+//! assert_eq!(MatchAble::get_token(&bits, 2), Some(true));
+//! assert_eq!(MatchAble::get_token(&bits, 5), None);
+//!
+//! let mut off = 2;
+//! assert!(MatchAble::skip_n::<Test>(&bits, &mut off, 2).is_ok());
+//! assert_eq!(off, 4);
+//! ```
+//!
+//! # core [`Matcher`]s
+//! for each endian wrapper, [`Matcher`] is implemented for [`Bits`], [`bool`], `{i,u}{8,16,32}`. in addition for the universal `&Bits`, [`Box<Bits>`], [`Rc<Bits>`](alloc_crate::rc::Rc) and [`Arc<Bits>`](alloc_crate::sync::Arc).
+//!
+//! range matching is implemented through [`BitRange`], created by [`br`] function.
+//!
+//! all this [`Matcher`]s matches with the endian wrapper slice they matched.
+//!
+//! ```
+//! let bits = LBits::new(5, 0b10101);
+//! assert_eq!(parse(&bits, b(5, 0b10101)), Ok(LBits::new(5, 0b10101)));
+//! assert_eq!(
+//!     parse(&bits, b(5, 0b10111)),
+//!     Err(MatchError::mismatch("`10111`".into(), 0))
+//! );
+//! assert_eq!(
+//!     parse(&LBits::new(3, 0b101), b(5, 0b10111)),
+//!     Err(MatchError::incomplete("`10111`".into(), 0))
+//! );
+//!
+//! assert!(true.test(&bits, &mut 0));
+//! assert!(matches(&LBits::new(8, 0b00001111), 15u8));
+//! assert_eq!(matches(&bits, Box::new(b(5, 0b10101))));
+//!
+//! assert_eq!(matches(bits, br(5, 0b01000..=0b11111)));
+//! ```
 use core::{
 	fmt::{self, Binary, Formatter, Write},
 	ops::{Range, RangeInclusive},
@@ -11,11 +73,54 @@ use crate::{
 	result::{Expected, MatchResult},
 };
 
+/// a bitfield.
+///
+/// `Bits` is a bitfield of maximum 64 bits, able to be matched with gramex.
+///
+/// it is created through [`b`] function, and it is a core [`Matcher`] for [`LBits`] and [`BBits`].
+///
+/// it is convertible from and to:
+/// - [`u8`], [`u16`], [`u32`], [`u64`], [`usize`].
+/// - [`i8`], [`i16`], [`i32`], [`i64`], [`isize`].
+/// - [`bool`], [`f32`], [`f64`].
+///
+/// it is comparable to [`u64`].
+///
+/// # example
+/// ```
+/// assert_eq!(b(5, 0b10101), Bits { value: 0b10101, len: 5 });
+/// assert_eq!(Bits::default(), Bits { value: 0, len: 0 });
+///
+/// assert_eq!(Bits::from(0x1234u16), b(16, 0x1234));
+/// assert_eq!(Bits::from(true), b(1, 1));
+///
+/// assert_eq!(u32::try_from(b(32, 0x1234)), Ok(0x1234));
+/// assert_eq!(u32::try_from(b(16, 0x1234)), Ok(0x1234));
+/// assert_eq!(u32::try_from(b(48, 0x1234)), Err(()));
+///
+/// assert_eq!(b(5, 0b10101), 0b10101u64);
+/// assert_eq!(format!("{:b}", b(5, 0b10101)), "0b10101");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bits {
+	/// the value of the bitfield
 	pub value: u64,
+	/// the length of the bitfield
 	pub len: u8,
 }
+
+/// create a [`Bits`] of given `value` and `len`.
+///
+/// it panic if `len` is outside `1..=64`, or `value` is greater than `len` capacity.
+///
+/// # example
+/// ```
+/// assert_eq!(b(5, 0b10101), Bits { value: 0b10101, len: 5 });
+/// assert_eq!(
+///     try_match(&LBits::new(5, 0b10101),
+///     b(5, 0b10101)), Ok(LBits::new(5, 0b10101))
+/// );
+/// ```
 #[inline]
 pub fn b(len: u8, value: u64) -> Bits {
 	assert!(len <= 64 && len != 0);
@@ -120,14 +225,41 @@ impl Bits {
 		buf[..value.len()].reverse();
 		Self { value: u64::from_le_bytes(buf), len: (value.len() * 8) as u8 }
 	}
+	/// convert a little endian byte array into `Bits`.
+	///
+	/// `N` must be `1..=8`.
+	///
+	/// # example
+	/// ```
+	/// assert_eq!(Bits::from_le_bytes([1, 2]), b(16, 0x201));
+	/// ```
 	pub fn from_le_bytes<const N: usize>(value: [u8; N]) -> Self {
 		assert!(N <= 8);
 		Self::from_le_slice(&value)
 	}
+
+	/// convert a big endian byte array into `Bits`.
+	///
+	/// `N` must be `1..=8`.
+	///
+	/// # example
+	/// ```
+	/// assert_eq!(Bits::from_be_bytes([1, 2]), b(16, 0x102));
+	/// ```
 	pub fn from_be_bytes<const N: usize>(value: [u8; N]) -> Self {
 		assert!(N <= 8);
 		Self::from_be_slice(&value)
 	}
+
+	/// convert `Bits` into little endian byte array.
+	///
+	/// `N` must be `1..=8` and it return `None` if the `len` is larger than the array capacity
+	///
+	/// # example
+	/// ```
+	/// assert_eq!(b(16, 0x201).to_le_bytes::<2>(), Some([1, 2]));
+	/// assert_eq!(b(32, 0x201).to_le_bytes::<2>(), None);
+	/// ```
 	pub fn to_le_bytes<const N: usize>(self) -> Option<[u8; N]> {
 		assert!(N <= 8);
 		if self.len > (N * 8) as u8 {
@@ -135,6 +267,16 @@ impl Bits {
 		}
 		Some(self.value.to_le_bytes()[..N].try_into().unwrap())
 	}
+
+	/// convert `Bits` into big endian byte array.
+	///
+	/// `N` must be `1..=8` and it return `None` if the `len` is larger than the array capacity
+	///
+	/// # example
+	/// ```
+	/// assert_eq!(b(16, 0x102).to_be_bytes::<2>(), Some([1, 2]));
+	/// assert_eq!(b(32, 0x102).to_be_bytes::<2>(), None);
+	/// ```
 	pub fn to_be_bytes<const N: usize>(self) -> Option<[u8; N]> {
 		assert!(N <= 8);
 		if self.len > (N * 8) as u8 {
@@ -150,12 +292,46 @@ impl Binary for Bits {
 	}
 }
 
+/// little endian [`Bits`] wrapper.
+///
+/// `LBits` is a wrapper around [`Bits`] which implement [`MatchAble`] in little endian direction.
+///
+/// see the [module documentation](crate::bits) for more info.
+///
+/// it is convertable and comparable between [`Bits`] and [`BBits`].
+///
+/// # example
+/// ```
+/// let bits = LBits::from(b(5, 0b10101));
+/// assert_eq!(bits, LBits(Bits { value: 0b10101, len:5 }));
+/// assert_eq!(bits, b(5, 0b10101));
+/// assert!(matches(&bits, b5(5, 0b10101)));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct LBits(pub Bits);
+
+/// big endian [`Bits`] wrapper.
+///
+/// `BBits` is a wrapper around [`Bits`] which implement [`MatchAble`] in big endian direction.
+///
+/// see the [module documentation](crate::bits) for more info.
+///
+/// it is convertable and comparable between [`Bits`] and [`LBits`].
+///
+/// # example
+/// ```
+/// let bits = BBits::from(b(5, 0b10101));
+/// assert_eq!(bits, BBits(Bits { value: 0b10101, len:5 }));
+/// assert_eq!(bits, b(5, 0b10101));
+/// assert!(matches(&bits, b5(5, 0b10101)));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct BBits(pub Bits);
 
 impl LBits {
+	/// create a new `LBits` of given `value` and `len`.
+	///
+	/// panic if `len` is outside `1..=64`.
 	#[inline]
 	pub fn new(len: u8, value: u64) -> LBits {
 		LBits(b(len, value))
@@ -163,6 +339,9 @@ impl LBits {
 }
 impl BBits {
 	#[inline]
+	/// create a new `BBits` of given `value` and `len`.
+	///
+	/// panic if `len` is outside `1..=64`.
 	pub fn new(len: u8, value: u64) -> BBits {
 		BBits(b(len, value))
 	}
@@ -293,6 +472,7 @@ impl Binary for BBits {
 	}
 }
 
+/// bit extract little endian
 #[inline]
 fn bit_extract_le(value: u64, start: u8, end: u8) -> u64 {
 	if start == end {
@@ -301,20 +481,37 @@ fn bit_extract_le(value: u64, start: u8, end: u8) -> u64 {
 	(value >> start) & (u64::MAX >> (64 - (end - start)))
 }
 #[inline]
+/// bit extract big endian
 fn bit_extract_be(value: u64, start: u8, end: u8, len: u8) -> u64 {
 	bit_extract_le(value, len - end, len - start)
 }
 
+/// value + len -> "`0100101`"
 fn to_bin(value: u64, len: u8) -> LeanString {
 	let mut str = LeanString::new();
-	write!(str, "0b{value:00$b}", len as usize).unwrap();
+	write!(str, "`{value:00$b}`", len as usize).unwrap();
 	str
 }
 
+/// range of [`Bits`] field.
+///
+/// it is a [`RangeInclusive`] equivelant for [`Bits`] facilatating bit range matching.
+///
+/// it is created by [`br`] function.
+///
+/// # example
+/// ```
+/// let bits = LBits::new(5, 0b10101);
+/// assert!(matches(&bits, br(5, 0b01000..=0b11111)));
+/// assert!(!matches(&bits, br(5, 0b00000..=0b01000)));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BitRange {
+	/// the start value of the `BitRange`
 	pub start: u64,
+	/// the end value of the `BitRange`, inclusive
 	pub end: u64,
+	/// the length of the `BitRange`
 	pub len: u8,
 }
 impl BitRange {
@@ -323,6 +520,17 @@ impl BitRange {
 		self.len as usize
 	}
 }
+
+/// create a new [`BitRange`] given a `len` and a `range`.
+///
+/// it panic if `len` is outside `1..=64`, or `start` or `end` are larger than `len` capacity.
+///
+/// # example
+/// ```
+/// let bits = LBits::new(5, 0b10101);
+/// assert!(matches(&bits, br(5, 0b01000..=0b11111)));
+/// assert!(!matches(&bits, br(5, 0b00000..=0b01000)));
+/// ```
 #[inline]
 pub fn br(len: u8, range: RangeInclusive<u64>) -> BitRange {
 	assert!(len <= 64);
@@ -420,10 +628,24 @@ macro_rules! impl_matching {
 impl_matching!(LBits, bit_extract_le);
 impl_matching!(BBits, bit_extract_be(.., len));
 
+/// matches a `len` sized [`Bits`] field by a predicate.
+///
+/// `a_b` produce a [`Matcher`] that matches a `len` sized [`Bits`] field, then test its value by `pred`, if `pred` return `true` it matches with the field, else it fail.
+///
+/// # example
+/// ```
+/// assert_eq!(
+///     try_match(&LBits::new(8, 0x12), a_b(8, |x| x > 0x10)),
+///     Ok(LBits::new(8, 0x12))
+/// );
+/// assert_eq!(!matches(&LBits::new(8, 0x1), a_b(8, |x| x > 0x10)));
+/// ```
 pub fn a_b<F: Fn(u64) -> bool>(len: u8, fun: F) -> A<F> {
 	assert!(len <= 64 && len != 0);
 	A { fun, len }
 }
+
+/// [`a_b`] [`Matcher`]
 #[derive(Debug, Clone, Copy)]
 pub struct A<F> {
 	fun: F,

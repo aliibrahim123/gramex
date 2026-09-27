@@ -1,6 +1,6 @@
 //! [`[u8]`](prim@slice) byte slices matching implementation.
 //!
-//! when `bytes` feature is enabled, [`[u8]`](prim@slice) matching get enabled with additional extra [`Matcher`]s through this module.
+//! when `bytes` feature is enabled, [`[u8]`](prim@slice) matching get enabled with additional extra [`Matcher`](crate::Matcher)s through this module.
 //!
 //! # `[u8]` [`MatchAble`] implementation
 //!
@@ -20,13 +20,13 @@
 //! assert_eq!(off, 2);
 //! ```
 //!
-//! # core [`Matcher`]s
+//! # core [`Matcher`](crate::Matcher)s
 //!
-//! the core [`Matcher`]s for [`[u8]`](prim@slice) are: `[u8]`, [`u8`], [`RangeInclusive<u8>`] for range matching, [`Vec<u8>`], and [`[u8; N]`](prim@array).
+//! the core [`Matcher`](crate::Matcher)s for [`[u8]`](prim@slice) are: `[u8]`, [`u8`], [`RangeInclusive<u8>`] for range matching, [`Vec<u8>`], and [`[u8; N]`](prim@array).
 //!
 //! in addition to `&[u8]`, [`Box<[u8]>`](Box), [`Rc<[u8]>`](alloc_crate::rc::Rc) and [`Arc<[u8]>`](alloc_crate::sync::Arc) that are common to all [`MatchAble`]s.
 //!
-//! these [`Matcher`]s matches with the `[u8]` slice they matched.
+//! these [`Matcher`](crate::Matcher)s matches with the `[u8]` slice they matched.
 //!
 //! ```
 //! assert_eq!(parse(&[1, 2, 3][..], &[1, 2, 3]), Ok(&[1, 2, 3][..]));
@@ -47,8 +47,8 @@
 //! assert!(matches(&[1, 2, 3][..], Box::new([1, 2, 3])));
 //! ```
 //!
-//! # extra [`Matcher`]s
-//! the `bytes` module export multiple [`Matcher`]s that matches and capture bytes of common kinds and patterns: [`u32_le`], [`be`], [`a_le`]...
+//! # extra [`Matcher`](crate::Matcher)s
+//! the `bytes` module export multiple [`Matcher`](crate::Matcher)s that matches and capture bytes of common kinds and patterns: [`u32_le`], [`be`], [`a_le`]...
 //!
 //! ```
 //! assert_eq!(try_match(&[1, 2, 3, 4][..], be(0x1020304u32)), Some(&[1, 2, 3, 4][..]));
@@ -124,7 +124,7 @@ define_ref_matcher!(#for(const N: usize) [u8; N], for [u8]);
 
 /// test if currest offset is `align` bytes aligned.
 ///
-/// `aligned` produce a [`Matcher`] that matches with `()` if the current offset is aligned to `align` bytes boundry, otherwise it fails.
+/// `aligned` produce a [`Matcher`](crate::Matcher) that matches with `()` if the current offset is aligned to `align` bytes boundry, otherwise it fails.
 ///
 /// # example
 /// ```
@@ -181,7 +181,7 @@ pub trait AsBEBytes: Sized + Clone {
 
 /// matches by the little endian byte view of `value`.
 ///
-/// `le` produce a [`Matcher`] that convert `value` into little endian byte array and matches with it, capturing the matched `[u8]` slice.
+/// `le` produce a [`Matcher`](crate::Matcher) that convert `value` into little endian byte array and matches with it, capturing the matched `[u8]` slice.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -201,7 +201,7 @@ pub fn le<T: AsLEBytes>(value: T) -> LE<T> {
 
 /// matches by the big endian byte view of `value`.
 ///
-/// `be` produce a [`Matcher`] that convert `value` into big endian byte array and matches with it, capturing the matched `[u8]` slice.
+/// `be` produce a [`Matcher`](crate::Matcher) that convert `value` into big endian byte array and matches with it, capturing the matched `[u8]` slice.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -221,7 +221,7 @@ pub fn be<T: AsBEBytes>(value: T) -> BE<T> {
 
 /// matches a little endian encoded value by a pridicate.
 ///
-/// `a_le` produce a [`Matcher`] that decode a little endian byte slice as `T` value and test it by `pred`. if `pred` return `true` it matches with the value, else it fail.
+/// `a_le` produce a [`Matcher`](crate::Matcher) that decode a little endian byte slice as `T` value and test it by `pred`. if `pred` return `true` it matches with the value, else it fail.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -242,7 +242,7 @@ pub fn a_le<T: AsLEBytes, F: Fn(T) -> bool>(pred: F) -> ALE<T, F> {
 
 /// matches a big endian encoded value by a pridicate.
 ///
-/// `a_be` produce a [`Matcher`] that decode a big endian byte slice as `T` value and test it by `pred`. if `pred` return `true` it matches with the value, else it fail.
+/// `a_be` produce a [`Matcher`](crate::Matcher) that decode a big endian byte slice as `T` value and test it by `pred`. if `pred` return `true` it matches with the value, else it fail.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -316,7 +316,7 @@ define_nb_matcher![
 	(f64, f64_le, f64_be),
 ];
 
-/// [bytes](crate::bytes) items [`Matcher`]s
+/// [bytes](crate::bytes) items [`Matcher`](crate::Matcher)s
 pub mod matchers {
 	use core::{any::type_name, fmt::Write, marker::PhantomData};
 	use lean_string::LeanString;
