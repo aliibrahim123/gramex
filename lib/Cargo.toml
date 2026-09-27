@@ -11,6 +11,8 @@ documentation = "https://docs.rs/gramex/"
 [lib]
 doctest = false
 
+[package.metadata.docs.rs]
+all-features = true
 
 [lints]
 clippy.pedantic = "warn"
