@@ -1,4 +1,4 @@
-//! semantic analysis for captures: validation, type resolution, item generation, kind resolution..
+//! semantic analysis for captures: validation, type resolution, item generation, kind resolution.
 
 use chunked_quote::{chunk, quote};
 use proc_macro2::{Ident, Span, TokenStream, TokenTree};
@@ -506,7 +506,7 @@ fn try_resolve_capture(
 
 	Ok(())
 }
-/// resolve a capture atomicly
+/// resolve a capture atomically
 fn resolve_capture(
 	cap: &mut Capture, is_optional: bool, parent: &mut CapParent, ctx: &mut Context,
 ) -> Result<(), ()> {

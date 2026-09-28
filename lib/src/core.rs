@@ -12,12 +12,12 @@ use crate::result::{Expected, MatchError, MatchResult};
 /// to be `MatchAble`, the implementing type must be:
 /// - viewable as a token list
 /// - indexable by `usize`
-/// - support random access
-/// - support slicing.
+/// - supporting random access
+/// - supporting slicing.
 ///
 /// these requirements are essential for ensuring flexible matching and zero-copy parsing are universal properties of matching.
 ///
-/// `MatchAble`s can have variable length tokens, not necessarily be unit-sized.
+/// `MatchAble`s can have variable length tokens, not necessarily unit-sized.
 ///
 /// # implementation example
 /// ```
@@ -53,32 +53,32 @@ use crate::result::{Expected, MatchError, MatchResult};
 /// ```
 ///
 /// # built-in `MatchAble` types
-/// gramex implement `MatchAble` for multiple types based on feature flags:
-/// - [`str`] though [`str` module](crate::str) and `str` feature flag.
-/// - `[u8]` though [`bytes` module](crate::bytes) and `bytes` feature flag.
-/// - bitfields though [`bits` module](crate::bits) and `bits` feature flag.
+/// gramex implements `MatchAble` for multiple types based on feature flags:
+/// - [`str`] through [`str` module](crate::str) and `str` feature flag.
+/// - `[u8]` through [`bytes` module](crate::bytes) and `bytes` feature flag.
+/// - bitfields through [`bits` module](crate::bits) and `bits` feature flag.
 pub trait MatchAble {
-	/// a single token of the `Matchable` created by [`get_token`](Self::get_token).
+	/// a single token of the `MatchAble` created by [`get_token`](Self::get_token).
 	///
-	/// `Token` can be [`Copy`], referece or anything.
+	/// `Token` can be [`Copy`], reference or anything.
 	///
-	/// it must be linked to the lifetime of the `Matchable` through `'src` lifetime.
+	/// it must be linked to the lifetime of the `MatchAble` through `'src` lifetime.
 	type Token<'src>
 	where
 		Self: 'src;
 
-	/// a slice of the `Matchable` tokens, created by [`slice`](Self::slice).
+	/// a slice of the `MatchAble` tokens, created by [`slice`](Self::slice).
 	///
 	/// `Slice` can be of any type, but usually primitive [slices](primitive@slice).
 	///
-	/// it must be linked to the lifetime of the `Matchable` through `'src` lifetime.
+	/// it must be linked to the lifetime of the `MatchAble` through `'src` lifetime.
 	///
 	/// implementing `MatchAble` for it provides the `MatchAble` subslice matching ability, and [`and expression`](crate::gram_ref#and-expression) support.
 	type Slice<'src>
 	where
 		Self: 'src;
 
-	/// the length of the `Matchable`
+	/// the length of the `MatchAble`
 	///
 	/// the length must be stable during matching and signal the end of input when the offset hits it.
 	///
@@ -91,7 +91,7 @@ pub trait MatchAble {
 	/// ```
 	fn len(&self) -> usize;
 
-	/// slice the `Matchable` by a [`Range`].
+	/// slice the `MatchAble` by a [`Range`].
 	///
 	/// `slice` tries to slice the `MatchAble` into a [`Slice`](Self::Slice), returning `None` if out of bounds or unaligned to token boundaries.
 	///
@@ -119,7 +119,7 @@ pub trait MatchAble {
 	///
 	/// `skip_n` is generic over [`Mode`], and returns a [`MatchError`] if it cannot skip all `n` tokens.
 	///
-	/// the default implementation treats the `MatchAble` as having unitary sized tokens, and returns [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] if there are not enough tokens.
+	/// the default implementation treats the `MatchAble` as having unit-sized tokens, and returns [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] if there are not enough tokens.
 	///
 	/// # example
 	/// ```
@@ -143,7 +143,7 @@ pub trait MatchAble {
 ///
 /// the `Mode` trait utilizes GATs (generic associated types) and the type state pattern to make the matching logic generic over matching features.
 ///
-/// it is generally used in [`Matcher`]s to have one super implementation that get monomorphizied with only the required features and no extra bloat, supporting everything from quick tester to advance parsers from the same primitive units.
+/// it is generally used in [`Matcher`]s to have one super implementation that gets monomorphized with only the required features and no extra bloat, supporting everything from quick tester to advanced parsers from the same primitive units.
 ///
 /// # how it works
 /// `Mode` allows the generalization of features through an orthogonal set of associated items for each feature that acts as selectors and guards.
@@ -195,7 +195,7 @@ pub trait MatchAble {
 /// - [`MatchError`] as `T` and [`Err`] [`MatchResult`] variant.
 /// - [`Error`](Self::Error) as `type Result`.
 /// - [`DO_ERROR`](Self::DO_ERROR) as `const DO_FEATURE`.
-/// - [`WithError`](Self::WithError)[`WithoutError`](Self::WithoutError) as `type With/WithoutFeature`.
+/// - [`WithError`](Self::WithError)/[`WithoutError`](Self::WithoutError) as `type With/WithoutFeature`.
 /// - [`err`](Self::err) as `fn result`.
 /// - [`wrap_error`](Self::wrap_error) as `fn wrap_result`.
 /// - [`unwrap_error`](Self::unwrap_error) as `fn unwrap_result`.
@@ -375,7 +375,7 @@ pub trait Mode {
 
 	/// map [`Success<T>`](Self::Success) into [`Success<U>`](Self::Success) by applying `fun` on its wrapped value.
 	///
-	/// it return `fun(val)` if [`capture`](#capture-feature) is enabled, otherwise it returns `()`.
+	/// it returns `fun(val)` if [`capture`](#capture-feature) is enabled, otherwise it returns `()`.
 	///
 	/// # example
 	/// ```
@@ -503,7 +503,7 @@ decl_mode!(
 	///
 	/// in `Capture`: [`capture`](Mode#capture-feature) is `true`, [`error`](Mode#error-feature) is `false`, and its simplified result is `Option<T>`.
 	///
-	/// it is great for grammar based extractions and data transformation that doesnt need detailed [`MatchError`]s.
+	/// it is great for grammar based extractions and data transformation that doesn't need detailed [`MatchError`]s.
 	///
 	/// # example
 	/// ```
@@ -526,7 +526,7 @@ decl_mode!(
 	///
 	/// in `Parse`: [`capture`](Mode#capture-feature) is `true`, [`error`](Mode#error-feature) is `true`, and its simplified result is `Result<T, MatchError>`.
 	///
-	/// it is great for advance parsers that need all features of [`Matcher`]s, both the expressive captures and detailed [`MatchError`]s.
+	/// it is great for advanced parsers that need all features of [`Matcher`]s, both the expressive captures and detailed [`MatchError`]s.
 	///
 	/// # example
 	/// ```
@@ -591,9 +591,9 @@ decl_mode!(
 /// }
 /// ```
 ///
-/// # builtin universal `Matcher`s
+/// # built-in universal `Matcher`s
 /// some common types implement `Matcher` for any [`MatchAble`] type, supporting `T: Matcher`.
-/// - `()`: acts as noop and always match with `()`.
+/// - `()`: acts as noop and always matches with `()`.
 /// - `&T`, [`Box<T>`], [`Rc<T>`], [`Arc<T>`]: redirect matching to `T`.
 /// - `Option<T>`: if it is `Some(T)`, it matches by `T` with `Some(T::Capture)`, otherwise it acts as a noop and always matches with `None`.
 ///
@@ -729,7 +729,7 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		self.do_match::<Parse>(matched, off)
 	}
 
-	/// return what the `Matcher` expect to match as beginning.
+	/// return what the `Matcher` expects to match as beginning.
 	///
 	/// the default implementation returns [`Expected::None`].
 	///

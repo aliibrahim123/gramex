@@ -13,7 +13,7 @@
 //! // `eat`: match by a `Matcher` with `Parse` mode
 //! cur.eat("let")?;
 //!
-//! // `try_eat`: atomicly match with `Capture` mode
+//! // `try_eat`: atomically match with `Capture` mode
 //! if let Some(nb) = cur.try_eat(nb) {
 //!     Expr::Nb(nb)
 //! }
@@ -24,7 +24,7 @@
 //! }
 //! ```
 //!
-//! these methods also have a macro equivalent taking a [grammer expression](crate::gram_ref)
+//! these methods also have a macro equivalent taking a [grammar expression](crate::gram_ref)
 //! ```
 //! // uuid
 //! let (a, b, c, d, e) = eat!(cur,
@@ -48,7 +48,7 @@
 //! })
 //! ```
 //!
-//! in addition, [`Cursor`] also provide several methods to simplify manual matching logic.
+//! in addition, [`Cursor`] also provides several methods to simplify manual matching logic.
 //! ```
 //! // `peek`: get current token
 //! if let Some(Token::Nb(nb)) = cur.peek() {
@@ -110,7 +110,7 @@ use crate::{
 /// let body = cur:rust_expr ',' expr;
 /// ```
 ///
-/// the `eat` macro takes the [`Cursor`] and the expression, match it with [`Parse`](crate::modes::Parse) [`Mode`] and return `Result<Capture, Cursor::Error>`.
+/// the `eat` macro takes the [`Cursor`] and the expression, matches it with [`Parse`](crate::modes::Parse) [`Mode`] and returns `Result<Capture, Cursor::Error>`.
 ///
 /// it is the macro equivalent of [`Cursor::eat`].
 ///
@@ -130,9 +130,9 @@ pub use gramex_macro::eat;
 /// let body = cur:rust_expr ',' '{' arm* ("else" "=>" rust_expr)? '}';
 /// ```
 ///
-/// the `match_map` macro takes the [`Cursor`] and a list of `pat => map` arms, and optionally an `else` arm at the end, and evaluate to the type of `map`.
+/// the `match_map` macro takes the [`Cursor`] and a list of `pat => map` arms, and optionally an `else` arm at the end, and evaluates to the type of `map`.
 ///
-/// it try match atomicly each `pat` in order with [`Capture`](crate::modes::Capture) [`Mode`], on first match, its `map` expression get evaluated as a result with [captures](crate::gram_ref#captures) bound by their name.
+/// it tries to match atomically each `pat` in order with [`Capture`](crate::modes::Capture) [`Mode`], on first match, its `map` expression gets evaluated as a result with [captures](crate::gram_ref#captures) bound by their name.
 ///
 /// otherwise it evaluates the `else` arm as result if found, else it panics with [`unreachable!`].
 ///
@@ -161,7 +161,7 @@ pub use gramex_macro::match_map;
 /// let body = cur:rust_expr ',' expr;
 /// ```
 ///
-/// the `test` macro takes the [`Cursor`] and the expression, match it with [`Test`] [`Mode`] and return `bool` as the result.
+/// the `test` macro takes the [`Cursor`] and the expression, matches it with [`Test`] [`Mode`] and returns `bool` as the result.
 ///
 /// it is the macro equivalent of [`Cursor::test`].
 ///
@@ -183,7 +183,7 @@ pub use gramex_macro::test;
 /// let body = cur:rust_expr ',' expr;
 /// ```
 ///
-/// the `try_eat` macro takes the [`Cursor`] and the expression, match it with [`Capture`](crate::modes::Capture) [`Mode`] and return `Option<Capture>`.
+/// the `try_eat` macro takes the [`Cursor`] and the expression, matches it with [`Capture`](crate::modes::Capture) [`Mode`] and returns `Option<Capture>`.
 ///
 /// it is the macro equivalent of [`Cursor::try_eat`].
 ///
@@ -320,7 +320,7 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for SpanAround<U> {
 /// for more info, read the [module documentation](crate::cursor).
 ///
 /// # implementation guide
-/// to implement `Cursor` for a custom type, the [`MatchAble`] must be specified, and the input and the offset must be provided though [`input`](Self::input), [`off`](Self::off) and [`off_mut`](Self::off_mut).
+/// to implement `Cursor` for a custom type, the [`MatchAble`] must be specified, and the input and the offset must be provided through [`input`](Self::input), [`off`](Self::off) and [`off_mut`](Self::off_mut).
 ///
 /// in addition, the `Cursor` [`Error`](Self::Error) type must be specified alongside its mapping from [`MatchError`] through [`map_error`](Self::map_error).
 ///

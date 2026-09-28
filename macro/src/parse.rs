@@ -17,7 +17,7 @@ use crate::{
 
 /// repetition specifiers
 ///
-/// **grammer**: `'?' | '*' | '+' | '[' exact:nb ']' | '[' min?:nb ".." max?:nb ']'`
+/// **grammar**: `'?' | '*' | '+' | '[' exact:nb ']' | '[' min?:nb ".." max?:nb ']'`
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct Rep(pub u32, pub u32);
 impl Rep {
@@ -38,16 +38,16 @@ impl Rep {
 	}
 }
 
-/// a single mathcer
+/// a single matcher
 #[derive(Debug, Clone)]
 pub enum Atom {
 	/// literal, blocks, paths and ranges that resolve to a matcher
 	///
-	/// **grammer**: `literal | block | path | value_atom ".." value_atom`
+	/// **grammar**: `literal | block | path | value_atom ".." value_atom`
 	Matcher(TokenTree),
 	/// match any item: `_`
 	Any,
-	/// enclosed expression,
+	/// enclosed expression
 	Group(Box<Expr>),
 	/// call to compound matcher: `path '<' args:list<matcher, ','> '>'`
 	Call { path: Box<[TokenTree]>, args: Box<[Matcher]> },
@@ -57,17 +57,17 @@ pub enum Atom {
 #[derive(Debug, Clone)]
 pub enum CapType {
 	Inherited,
-	/// **grammer**: `':' type`
+	/// **grammar**: `':' type`
 	Explicit(TokenStream),
-	// **grammer**: `':' "struct" ident?`
+	// **grammar**: `':' "struct" ident?`
 	Struct(Option<Ident>),
-	/// **grammer**: `':' "enum" ident?`
+	/// **grammar**: `':' "enum" ident?`
 	Enum(Option<Ident>),
 }
 
 /// capture the matched section
 ///
-/// **grammer**: `ident rep? ':' atom |  
+/// **grammar**: `ident rep? ':' atom |  
 ///     '(' ident rep? (":" -> cap_type) '=' expr ("=>" -> map:expr) ')'
 /// `
 #[derive(Debug, Clone)]
@@ -95,7 +95,7 @@ impl Default for Capture {
 }
 
 #[derive(Debug, Clone)]
-/// the grammer unit
+/// the grammar unit
 pub enum Expr {
 	/// atom with modifiers: `not?:'!' near?:'~' atom rep?`
 	Unit {
@@ -111,7 +111,7 @@ pub enum Expr {
 	Or(Vec<Expr>),
 	/// match all of the expressions: `list<expr, '&'>`
 	And(Vec<Expr>),
-	/// matches `expr` if `cond` matches, else match nothing: `expr "->" expr`
+	/// matches `expr` if `cond` matches, else matches nothing: `expr "->" expr`
 	Imply {
 		cond: Box<Expr>,
 		expr: Box<Expr>,
@@ -120,7 +120,7 @@ pub enum Expr {
 	Error,
 }
 
-/// at an end of expression chain
+/// at the end of an expression chain
 fn is_expr_end(cur: &Cursor) -> bool {
 	cur.is_end()
 		|| cur.test_punct(',') // in call atom args
@@ -424,7 +424,7 @@ pub struct Matcher {
 }
 /// parse a [`Matcher`] argument in a call atom
 ///
-/// **grammer**: `("for" -> `matched_type:type` ':') expr ("=>" -> map:expr))
+/// **grammar**: `("for" -> `matched_type:type` ':') expr ("=>" -> map:expr))
 pub fn parse_call_arg(cur: &mut Cursor) -> Matcher {
 	let matched_type = match cur.try_kw("for") {
 		true => {
@@ -489,7 +489,7 @@ pub fn parse_matcher(cur: &mut Cursor) -> Matcher {
 
 /// a term in gramex macro
 ///
-/// **grammer**: `
+/// **grammar**: `
 /// "let" ident ('<' -> args:list<ident, ','> '>') (':' -> type)
 /// '=' expr ("=>" -> map:expr)
 /// `
@@ -500,9 +500,9 @@ pub struct Term {
 	pub cap: Capture,
 }
 
-/// a grammer declaration
+/// a grammar declaration
 ///
-/// **grammer**: `"for" matched_type:type ';' terms*:term`
+/// **grammar**: `"for" matched_type:type ';' terms*:term`
 #[derive(Debug, Clone)]
 pub struct GrammarDecl {
 	pub matched_type: TokenStream,
@@ -570,7 +570,7 @@ pub fn parse_grammer_decl(cur: &mut Cursor) -> GrammarDecl {
 
 /// match expression macros args
 ///
-/// grammer: `(when(!is_cur_op)} 'for' -> matched_type:type ',') value:expr ',' expr`
+/// grammar: `(when(!is_cur_op)} 'for' -> matched_type:type ',') value:expr ',' expr`
 #[derive(Debug, Clone)]
 pub struct MatchExpr {
 	pub matched_type: Option<TokenStream>,
@@ -601,7 +601,7 @@ pub fn parse_match_expr(cur: &mut Cursor, is_cur_op: bool) -> Option<MatchExpr> 
 
 /// `match_map` macro args
 ///
-/// grammer: `cursor:ident ',' '{'
+/// grammar: `cursor:ident ',' '{'
 ///     (arms* = pat:expr "=>" map:expr") ("else" -> "=>" else_:expr) ','?
 /// '}'`
 #[derive(Debug)]
@@ -658,7 +658,7 @@ pub fn parse_match_map(cur: &mut Cursor) -> Option<MatchMap> {
 
 /// `derive_enum_matcher` macro args
 ///
-/// grammer: `
+/// grammar: `
 ///     '#' '[' "derive_enum_matcher" '('
 ///         "for" matched_type:type (',' "field" '=' field:expr)?
 ///         (',' "expected" '=' expected:expr)?
@@ -676,7 +676,7 @@ pub struct EnumMatcher {
 
 /// enum variant
 ///
-/// grammer: `name:ident` ('(' fields:list<type, ','> ')')? !','*
+/// grammar: `name:ident` ('(' fields:list<type, ','> ')')? !','*
 #[derive(Debug)]
 pub struct Variant {
 	pub name: Ident,

@@ -14,7 +14,7 @@ pub use crate::result::{Expected, MatchError, MatchResult};
 use crate::{MatchAble, Mode};
 use lean_string::ToLeanString;
 
-/// coercion the type into its `&MatchAble` version, using method expression coercion
+/// coerce the type into its `&MatchAble` version, using method expression coercion
 pub trait AsMatchAble {
 	fn __as_matchable(&self) -> &Self {
 		self
@@ -22,7 +22,7 @@ pub trait AsMatchAble {
 }
 impl<T: MatchAble + ?Sized> AsMatchAble for T {}
 
-/// coercion the type into its `&mut Cursor` version, using method expression coercion
+/// coerce the type into its `&mut Cursor` version, using method expression coercion
 pub trait AsCursor<T: ?Sized> {
 	fn __as_cursor(&mut self) -> &mut Self {
 		self

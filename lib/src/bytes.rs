@@ -4,7 +4,7 @@
 //!
 //! # `[u8]` [`MatchAble`] implementation
 //!
-//! [`MatchAble`] is implemented for `[u8]` where [`Slice`](MatchAble::Slice) is [`&[u8]`](prim@slice), [`Token`](MatchAble::Token) is [`u8`] and offsets are indexes of `[u8]` slice.
+//! [`MatchAble`] is implemented for `[u8]` where [`Slice`](MatchAble::Slice) is [`&[u8]`](prim@slice), [`Token`](MatchAble::Token) is [`u8`] and offsets are indices of `[u8]` slice.
 //!
 //! ```
 //! let bytes: &[u8] = &[1, 2, 3];
@@ -122,7 +122,7 @@ fn to_hex(slice: &[u8]) -> LeanString {
 define_ref_matcher!(Vec<u8>, for [u8]);
 define_ref_matcher!(#for(const N: usize) [u8; N], for [u8]);
 
-/// test if current offset is `align` bytes aligned.
+/// test if the current offset is `align` bytes aligned.
 ///
 /// `aligned` produces a [`Matcher`](crate::Matcher) that matches with `()` if the current offset is aligned to an `align`-byte boundary, otherwise it fails.
 ///
@@ -147,7 +147,7 @@ pub trait AsLEBytes: Sized + Clone {
 	/// the number of bytes to represent this type
 	const BYTES: usize;
 
-	/// a  `[u8; N]` byte array representing this type.
+	/// a `[u8; N]` byte array representing this type.
 	type Bytes: AsRef<[u8]>;
 
 	/// convert a little endian byte array to this type.
@@ -169,7 +169,7 @@ pub trait AsBEBytes: Sized + Clone {
 	/// the number of bytes to represent this type
 	const BYTES: usize;
 
-	/// a  `[u8; N]` byte array representing this type.
+	/// a `[u8; N]` byte array representing this type.
 	type Bytes: AsRef<[u8]> + Copy;
 
 	/// convert a big endian byte array to this type.

@@ -232,7 +232,7 @@ impl Cursor<'_> {
 		let group = self.group(delim)?;
 		Some(Cursor::new(group.stream(), group.span_close(), self.errors))
 	}
-	/// try creates a [`Cursor`] for the stream of a [`Group`] of a specific [`Delimiter`]
+	/// try create a [`Cursor`] for the stream of a [`Group`] of a specific [`Delimiter`]
 	pub fn try_enter_group(&mut self, delim: Delimiter) -> Option<Cursor<'_>> {
 		let group = self.try_group(delim)?;
 		Some(Cursor::new(group.stream(), group.span_close(), self.errors))

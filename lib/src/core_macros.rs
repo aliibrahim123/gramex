@@ -128,7 +128,7 @@ pub use gramex_macro::matches;
 /// let body = ("for" matched:type ',')? value:rust_expr ',' expr;
 /// ```
 ///
-/// `parse` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammer expression `expr`, `expr` can access local variables.
+/// `parse` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammar expression `expr`, `expr` can access local variables.
 ///
 /// it returns `Result<Capture, MatchError>` for whether the expression matches the entire `value` from offset `0` till `value.len()`. it returns an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
 ///
@@ -149,7 +149,7 @@ pub use gramex_macro::parse;
 /// let body = ("for" matched:type ',')? value:rust_expr ',' expr;
 /// ```
 ///
-/// `try_match` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammer expression `expr`, `expr` can access local variables.
+/// `try_match` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammar expression `expr`, `expr` can access local variables.
 ///
 /// it returns `Option<Capture>` for whether the expression matches the entire `value` from offset `0` till `value.len()`. it returns `None` if there is excess input.
 ///

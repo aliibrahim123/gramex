@@ -1,4 +1,4 @@
-//! codegen house, transform ast into [`TokenStream`]
+//! codegen house, transforms ast into [`TokenStream`]
 
 // matching is done inside matcher struct / inside inlined expression, using nested labeled blocks that endless branching and primitive offset logic
 // everything is generalized over matching mode using guards and selectors.
@@ -42,7 +42,7 @@ impl BlockLable<'_> {
 /// a `gramex::Mode` type
 #[derive(Debug, Clone, Copy)]
 struct Mode {
-	/// is concrete (like `Test`) or a type parameer `M`
+	/// is concrete (like `Test`) or a type parameter `M`
 	is_concrete: bool,
 	capture: bool,
 	error: bool,
@@ -223,7 +223,7 @@ fn gen_error_not(
 		));
 	});
 }
-/// generate error logic for a [`Expr::Or`]
+/// generate error logic for an [`Expr::Or`]
 fn gen_error_or(stream: &mut TokenStream, exprs: &[Expr], ctx: &Context) {
 	gen_error(stream, ctx, |stream| {
 		chunk!(stream, __::MatchError::expected(
@@ -232,7 +232,7 @@ fn gen_error_or(stream: &mut TokenStream, exprs: &[Expr], ctx: &Context) {
 		));
 	});
 }
-/// generate expression evaluating to `Matcher` for a [`Atom::Call`] argument
+/// generate expression evaluating to `Matcher` for an [`Atom::Call`] argument
 fn gen_call_matcher(stream: &mut TokenStream, arg: &Matcher) {
 	// skip matcher bolerpliat for bare atoms, as they resolve directly to `Matcher`
 	if let Expr::Unit { atom, not: false, near: false, rep: Rep::ONCE } = &arg.cap.expr
@@ -281,7 +281,7 @@ fn gen_atom(mut stream: &mut TokenStream, atom: &Atom, ctx: &Context) {
 	}
 }
 
-/// append matching logic for non simple `[n..m]` [`Rep`]
+/// append matching logic for non-simple `[n..m]` [`Rep`]
 fn gen_rep_complex(
 	stream: &mut TokenStream, rep: Rep, ctx: &Context, do_fork: bool,
 	item: impl Fn(&mut TokenStream, &Context),
@@ -486,7 +486,7 @@ fn gen_atomic_capture(mut stream: &mut TokenStream, expr: &Expr, ctx: &Context) 
 	}
 }
 
-/// generate unwraping logic for capture based on its conatiner
+/// generate unwrapping logic for capture based on its container
 fn gen_cap_unwrwap(mut stream: &mut TokenStream, ident: &Ident, container: CapContainer) {
 	chunk!(stream,
 		#{ident!("__cap__{ident}")}
@@ -498,7 +498,7 @@ fn gen_cap_unwrwap(mut stream: &mut TokenStream, ident: &Ident, container: CapCo
 	);
 }
 
-/// generate setting logic for capture based on its conatiner
+/// generate setting logic for capture based on its container
 fn gen_cap_set(mut stream: &mut TokenStream, ident: &Ident, container: CapContainer) {
 	chunk!(stream,
 		#{ident!("__cap__{ident}")} #match container {
@@ -510,7 +510,7 @@ fn gen_cap_set(mut stream: &mut TokenStream, ident: &Ident, container: CapContai
 	);
 }
 
-/// generate expression producing a `Atomic` / `Slice` / `UnitStruct` capture
+/// generate expression producing an `Atomic` / `Slice` / `UnitStruct` capture
 fn gen_cap_normal_produce(mut stream: &mut TokenStream, info: &CapInfo, ctx: &Context) {
 	match &info.kind {
 		// cap.unwrap()
@@ -690,7 +690,7 @@ fn gen_expr(stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 		Expr::Error => {}
 	}
 }
-/// generate matching expression evaluating to `MatchResult<()>` for a [`Expr`]
+/// generate matching expression evaluating to `MatchResult<()>` for an [`Expr`]
 fn gen_expr_inline(stream: &mut TokenStream, expr: &Expr, ctx: &Context) {
 	match expr {
 		Expr::Unit { not: false, near: false, rep: Rep::ONCE, atom }
@@ -733,7 +733,7 @@ fn gen_root_cap(
 		};
 	);
 }
-/// generate matching logic for root non capturing [`Expr`], save result in `__res`
+/// generate matching logic for root non-capturing [`Expr`], save result in `__res`
 fn gen_root_expr(mut stream: &mut TokenStream, expr: &Expr, mode: Mode) {
 	let count = Cell::new(0);
 	let ctx = Context::new(&count, mode, None);

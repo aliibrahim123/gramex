@@ -1,6 +1,6 @@
 //! bits matching implementation
 //!
-//! when `bits` feature is enabled, bits matching gets enabled with additional extra [`Matcher`]s through this module.
+//! when `bits` feature is enabled, bits matching gets enabled with additional [`Matcher`]s through this module.
 //!
 //! # [`Bits`]
 //! [`Bits`] is the core structure in bit matching, it represents a bitfield of maximum 64 bits.
@@ -19,7 +19,7 @@
 //! # [`MatchAble`] implementation
 //! bit matching is done through 2 [`Bits`] wrappers: [`BBits`] and [`LBits`], for big endian and little endian directions respectively.
 //!
-//! [`MatchAble`] is implemented for each where [`Slice`](MatchAble::Slice) is [`LBits`]/[`BBits`], [`Token`](MatchAble) is [`bool`], and offsets are bit position.
+//! [`MatchAble`] is implemented for each where [`Slice`](MatchAble::Slice) is [`LBits`]/[`BBits`], [`Token`](MatchAble) is [`bool`], and offsets are bit positions.
 //!
 //! ```
 //! let bits = LBits::new(5, 0b10101);
@@ -253,7 +253,7 @@ impl Bits {
 
 	/// convert `Bits` into little endian byte array.
 	///
-	/// `N` must be `1..=8` and it return `None` if the `len` is larger than the array capacity
+	/// `N` must be `1..=8` and it returns `None` if the `len` is larger than the array capacity
 	///
 	/// # example
 	/// ```
@@ -270,7 +270,7 @@ impl Bits {
 
 	/// convert `Bits` into big endian byte array.
 	///
-	/// `N` must be `1..=8` and it return `None` if the `len` is larger than the array capacity
+	/// `N` must be `1..=8` and it returns `None` if the `len` is larger than the array capacity
 	///
 	/// # example
 	/// ```

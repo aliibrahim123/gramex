@@ -166,7 +166,7 @@ pub enum MatchErrorKind {
 	/// ```
 	MisMatch(Expected),
 
-	/// an incomplete input while [`Expected`] something.
+	/// an incomplete input while expecting something.
 	///
 	/// # example
 	/// ```
@@ -205,7 +205,7 @@ pub enum MatchErrorKind {
 ///
 /// the `MatchError` is a general and good enough error type used universally by every [`Matcher`](crate::Matcher) and the general utilities powered by it.
 ///
-/// it is composed of a [`MatchErrorKind`] representing its kind, and `off`set representing where it occurred, and optionally an [`Expected`] representing what was expected to be.
+/// it is composed of a [`MatchErrorKind`] representing its kind, an `offset` representing where it occurred, and optionally an [`Expected`] representing what was expected to be.
 ///
 /// `MatchError` is generally constructed through the various constructors provided by it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -334,7 +334,7 @@ pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;
 
 /// convert the type into a [`MatchResult`].
 ///
-/// [`into_result`](Self::into_result) take an offset for `Err` if needed and the [`Mode`] and return a [`MatchResult`] corresponding to `self`.
+/// [`into_result`](Self::into_result) takes an offset for `Err` if needed and the [`Mode`] and returns a [`MatchResult`] corresponding to `self`.
 ///
 /// the implementing types are:
 ///

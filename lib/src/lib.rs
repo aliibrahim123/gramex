@@ -58,7 +58,7 @@
 //!     let ident: String = ('a'..'z' | 'A'..'Z' | '0'..'9' | '_')+;
 //!     // `=> expr` mapping of the matched section (bound as `nb`)
 //!     let nb: i64 = '-'? ('0'..'9')+ => nb.parse().unwrap();
-//!     // `path<args>` compound matchers, `list<item, sep>`: list of `sep` seprated `item`s
+//!     // `path<args>` compound matchers, `list<item, sep>`: list of `sep` separated `item`s
 //!     let arr: Vec<Val<'src>> = '[' list:list<val, ','> ']' => list;
 //!     // generate an enum `Val`, can also use predefined matchers
 //!     let val: enum = true:"true" | false:"false" | ident:ident | nb:nb | arr:arr;
@@ -67,7 +67,7 @@
 //! // (input, offset) tuple with some utilities, for ergonomic advanced cases
 //! type Cur<'src> = SimpleCursor<'src, str>;
 //! fn parse_primary(cur: &mut Cur) -> Result<Expr, MatchError> {
-//!     // `try_eat`: optional match by matcher, even from grammer declarations
+//!     // `try_eat`: optional match by matcher, even from grammar declarations
 //!     if let Some(num) = cur.try_eat(nb) {
 //!         Ok(Expr::Num(num))
 //!     } else if let Some(_ident) = cur.try_eat(ident) {
@@ -78,7 +78,7 @@
 //!     }
 //! }
 //! fn parse_expr(cur: &mut Cur) -> Result<Expr, MatchError> {
-//!     // `eat`: match by a grammer expression
+//!     // `eat`: match by a grammar expression
 //!     let (name,) = eat!(cur, name:ident '=')?;
 //!     let mut expr = parse_primary(cur)?;
 //!     'op_loop: loop {

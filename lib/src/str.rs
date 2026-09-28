@@ -1,6 +1,6 @@
 //! [`str`] matching implementation
 //!
-//! when `str` feature is enabled, [`str`] matching gets enabled with additional extra [`Matcher`]s through this module.
+//! when `str` feature is enabled, [`str`] matching gets enabled with additional [`Matcher`]s through this module.
 //!
 //! # `str` [`MatchAble`] implementation
 //!
@@ -288,7 +288,7 @@ define_char_patterns![
 ///
 /// `digit` creates a [`Matcher`] that matches a character that is a digit of `radix` between `2` and `36` inclusive.
 ///
-/// it is based on [`char::is_digit`], and capture the character `str` slice.
+/// it is based on [`char::is_digit`], and captures the character `str` slice.
 ///
 /// # example
 /// ```

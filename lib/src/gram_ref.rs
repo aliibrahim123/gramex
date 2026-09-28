@@ -5,7 +5,7 @@
 //!
 //! they can be used in different contexts, as standalone items or inlined with the code, by the different macros provided by gramex: [`grammar!`], [`matches!`], [`try_match!`], [`check!`], [`parse!`], [`matcher!`], [`eat!`], [`try_eat!`], [`test!`], and [`match_map!`].
 //!
-//! the grammar expressions are composed of [atoms](#atoms) representing atomic patterns, and expressions chains representing compound patterns.
+//! the grammar expressions are composed of [atoms](#atoms) representing atomic patterns, and expression chains representing compound patterns.
 //!
 //! ```gramex
 //! let expr = unit | seq | and | or | imply | capture;
@@ -74,7 +74,7 @@
 //!
 //! a compound matcher is a `Fn(..Matcher) -> Matcher`, the passed arguments are transformed into anonymous [`Matcher`]s and passed to the function, then its return [`Matcher`] is matched against.
 //!
-//! the arguments are matcher declarations with a root expression, an optional matched type specifier (default to the current one), and an optional [map](#mapping) for the root [capture](#captures).
+//! the arguments are matcher declarations with a root expression, an optional matched type specifier (defaults to the current one), and an optional [map](#mapping) for the root [capture](#captures).
 //!
 //! ```rust
 //! assert!(matches!("ababa", list<"a", "b">));
@@ -99,7 +99,7 @@
 //! the [range atom](#range-atom) can not have these modifications.
 //!
 //! ### not operator
-//! the not operator `!` matches exactly one [token](MatchAble::Token) if the [atom](#atoms) doesnt match.
+//! the not operator `!` matches exactly one [token](MatchAble::Token) if the [atom](#atoms) doesn't match.
 //!
 //! the not operator also fails at incomplete input.
 //!
@@ -126,35 +126,35 @@
 //!  (range: '[' min?:nb ".." max?:nb ']');
 //! ```
 //!
-//! repetitions match an [atom](#atoms) some interval of times.
+//! repetitions match an [atom](#atoms) for some interval of times.
 //!
 //! #### shorthands
-//! `?` match the [atom](#atoms) 0 or 1 times.
+//! `?` matches the [atom](#atoms) 0 or 1 times.
 //! ```
 //! assert!(matches!("a", "a"?));
 //! assert!(matches!("", "a"?));
 //! ```
 //!
-//! `*` match the [atom](#atoms) 0 or more times.
+//! `*` matches the [atom](#atoms) 0 or more times.
 //! ```
 //! assert!(matches!("aa", "a"*));
 //! assert!(matches!("", "a"*));
 //! ```
 //!
-//! `+` match the [atom](#atoms) 1 or more times.
+//! `+` matches the [atom](#atoms) 1 or more times.
 //! ```
 //! assert!(matches!("aa", "a"*));
 //! assert!(!matches!("", "a"*));
 //! ```
 //!
-//! `[n]` match the [atom](#atoms) exactly `n` times.
+//! `[n]` matches the [atom](#atoms) exactly `n` times.
 //! ```
 //! assert!(matches!("aa", "a"[2]));
 //! assert!(!matches!("a", "a"[2]));
 //! ```
 //!
 //! #### canonical form
-//! `[min..max]` match the [atom](#atoms) between `min` and `max` (inclusive) times.
+//! `[min..max]` matches the [atom](#atoms) between `min` and `max` (inclusive) times.
 //!
 //! `min` and `max` are optional and default to `0` and infinity respectively.
 //! ```
@@ -247,7 +247,7 @@
 //! let capture = name:ident rep? ':' (atom & !group_atom) |
 //!     (name:ident rep? (":" type:cap_type)? '=' expr ("=>" map:rust_expr)?);
 //! ```
-//! the capture matches an expression then extract the matched section as a result.
+//! the capture matches an expression then extracts the matched section as a result.
 //!
 //! there are 2 syntaxes for captures, a shorthand one with an [atom](#atoms) `name:atom` and a full version with an expression `(name = expr)`.
 //!
@@ -265,7 +265,7 @@
 //! ```
 //!
 //! ### repetition
-//! captures support [repetition](#repetitions), either by inferring it from the optionality of the path ([optional](#repetitions) units, [or](#or-expression) and [imply](#imply-expression) expressions), or by manually specifing it.
+//! captures support [repetition](#repetitions), either by inferring it from the optionality of the path ([optional](#repetitions) units, [or](#or-expression) and [imply](#imply-expression) expressions), or by manually specifying it.
 //!
 //! repetition overrides the capture resolved type, it becomes [`Option<T>`] if repetition is optional, and [`Vec<T>`] otherwise.
 //!
@@ -314,7 +314,7 @@
 //! captures can be of different kinds depending on the properties of their expressions.
 //!
 //! ### slice captures
-//! the most common captures where the expression doesnt contain any nested capture.
+//! the most common captures where the expression doesn't contain any nested capture.
 //!
 //! they just extract the matched section through [`MatchAble::slice`], and have a default type of [`MatchAble::Slice`].
 //!
@@ -333,7 +333,7 @@
 //! ```
 //!
 //! #### atomic captures
-//! the atomic capture have expression of unmodified [value](#value-atoms), [range](#range-atom) and [call atoms](#call-atom).
+//! the atomic capture has an expression of unmodified [value](#value-atoms), [range](#range-atom) and [call atoms](#call-atom).
 //!
 //! they resolve to the [`Capture`](Matcher::Capture) returned by the atom [`Matcher`].
 //!
@@ -377,7 +377,7 @@
 //!
 //! they resolve to a [specified](#type-specifier) enum where each or branch resolves to a specific variant.
 //!
-//! variants are specified from a single nested capture in the branch where they become `CapName(cap_type)`, a `None` variant is used if the branch doesnt have a capture.  
+//! variants are specified from a single nested capture in the branch where they become `CapName(cap_type)`, a `None` variant is used if the branch doesn't have a capture.  
 //!
 //! ```
 //! #[derive(PartialEq)]

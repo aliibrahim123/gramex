@@ -315,9 +315,9 @@ pub use derive_slice_matchable;
 ///
 /// if the variant is a tuple, the [`Capture`](crate::Matcher::Capture) is a tuple of the variant fields, else it is the matched [`Token`](MatchAble::Token).
 ///
-/// the `field` argument is an optional field path that specify where is the enum inside the token, if not specified, the enum is assumed to be the token.
+/// the `field` argument is an optional field path that specifies where the enum is inside the token, if not specified, the enum is assumed to be the token.
 ///
-/// the `expected` argument is an optional path that resolve to a `Fn(var: &str) -> Expected` called with the variant name to generate the [`Expected`], if not specified, [`Expected::None`] is used.
+/// the `expected` argument is an optional path that resolves to a `Fn(var: &str) -> Expected` called with the variant name to generate the [`Expected`], if not specified, [`Expected::None`] is used.
 ///
 /// # example
 /// ```
