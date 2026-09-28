@@ -52,7 +52,7 @@ pub fn grammar(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let id = CUR_ID.fetch_add(1, Ordering::Relaxed);
 	quote! {
 		#for err in errors #{ #err }
-		// detecated module to have global imports
+		// dedicated module to have global imports
 		# #[doc(hidden)]
 		mod #{ident!("gram_def_{id}")} {
 			use super::*;

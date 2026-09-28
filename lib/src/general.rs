@@ -38,7 +38,7 @@ pub const pos: Pos = Pos;
 
 /// turn a [`Matcher`] into an atomic [`Matcher`].
 ///
-/// `atomic` takes a [`Matcher`] and returns a new [`Matcher`] that redirect matching to the input, and rewind to start offset on failure.
+/// `atomic` takes a [`Matcher`] and returns a new [`Matcher`] that redirects matching to the input, and rewinds to the start offset on failure.
 ///
 /// # example
 /// ```
@@ -57,7 +57,7 @@ pub fn atomic<T: MatchAble + ?Sized, U: Matcher<T>>(matcher: U) -> Atomic<T, U> 
 
 /// matches a [token](MatchAble::Token) with a predicate.
 ///
-/// `a` produce a [`Matcher`] that capture the current [token](MatchAble::Token) and test it by `pred`. if `pred` return `true` it matches with the token, else it fail.
+/// `a` produces a [`Matcher`] that captures the current [token](MatchAble::Token) and tests it by `pred`. If `pred` returns `true` it matches with the token, else it fails.
 ///
 /// # example
 /// ```
@@ -77,7 +77,7 @@ where
 
 /// matches a [slice](MatchAble::Slice) of `n` [tokens](MatchAble::Token) with a predicate.
 ///
-/// `an` produce a [`Matcher`] that capture a [slice](MatchAble::Slice) of `n` [tokens](MatchAble::Token) and test it by `pred`. if `pred` return `true` it matches with the slice, else it fail.
+/// `an` produces a [`Matcher`] that captures a [slice](MatchAble::Slice) of `n` [tokens](MatchAble::Token) and tests it by `pred`. If `pred` returns `true` it matches with the slice, else it fails.
 ///
 /// # example
 /// ```
@@ -97,7 +97,7 @@ where
 
 /// always fail with [`Expected`].
 ///
-/// `expected` produce a [`Matcher`] that always fail with [mismatch](crate::result::MatchErrorKind::MisMatch) and [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`](crate::result::MatchError) with `expected` depending on the offset.
+/// `expected` produces a [`Matcher`] that always fails with [mismatch](crate::result::MatchErrorKind::MisMatch) and [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`](crate::result::MatchError) with `expected` depending on the offset.
 ///
 /// # example
 /// ```
@@ -116,7 +116,7 @@ pub fn expected(expected: impl Into<Expected>) -> FailExpected {
 
 /// always fail with a custom message.
 ///
-/// `fail_with` produce a [`Matcher`] that always fail with a [Other](crate::result::MatchErrorKind::Other) [`MatchError`](crate::result::MatchError) of custom `msg`.
+/// `fail_with` produces a [`Matcher`] that always fails with an [Other](crate::result::MatchErrorKind::Other) [`MatchError`](crate::result::MatchError) of custom `msg`.
 ///
 /// # example
 /// ```
@@ -131,7 +131,7 @@ pub fn fail_with(msg: impl Into<LeanString>) -> FailWith {
 
 /// matches a separated list of `item`s.
 ///
-/// `list` take an `item` and `sep` [`Matcher`]s and produce a [`Matcher`] that matches a non-empty list of `item`s separated by `sep`.
+/// `list` takes `item` and `sep` [`Matcher`]s and produces a [`Matcher`] that matches a non-empty list of `item`s separated by `sep`.
 ///
 /// no trailing comma is allowed, and the capture is `Vec<Item::Capture>`.
 ///
@@ -157,7 +157,7 @@ pub fn list<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>>(
 
 /// matches a delimited and separated list of `item`s.
 ///
-/// `delim_list` take a `start`, `item`, `sep` and `end` [`Matcher`]s and produce a [`Matcher`] that matches a maybe empty list of `item`s separated by `sep` and delimited by `start` and `end`.
+/// `delim_list` takes `start`, `item`, `sep` and `end_` [`Matcher`]s and produces a [`Matcher`] that matches a maybe-empty list of `item`s separated by `sep` and delimited by `start` and `end`.
 ///
 /// no trailing comma is allowed, and the capture is `Vec<Item::Capture>`.
 ///
@@ -190,7 +190,7 @@ where
 	DelimList { start, item, sep, end_, __marker: PhantomData }
 }
 
-/// [`MatchFn`] function of spicific lifetime instance.
+/// [`MatchFn`] function of specific lifetime instance.
 #[doc(hidden)]
 pub trait LifedMatchFn<'src, T: MatchAble + ?Sized + 'src> {
 	type Capture: 'src;
@@ -216,9 +216,9 @@ where
 ///
 /// `MatchFn` matches by a function of type `Fn(&MatchAble, &mut usize) -> IntoResult` where the return type is anything implementing [`IntoResult`], like [`bool`], [`Option<T>`] and [`Result<T, MatchError>`].
 ///
-/// due to limitations in rustc, closures must specify their arguments types, and can only capture owned values.
+/// due to limitations in rustc, closures must specify their argument types, and can only capture owned values.
 ///
-/// wrapped functions dont get [`Mode`] generifications treatment, for that it is advised to use regular [`Matcher`]s for general cases.
+/// wrapped functions don't get the [`Mode`] generalization treatment; for that, it is advised to use regular [`Matcher`]s for general cases.
 ///
 /// # example
 /// ```

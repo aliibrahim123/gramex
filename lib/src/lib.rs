@@ -1,31 +1,31 @@
 //! # gramex
-//! grammar expressions, a common language for advance parsers.
+//! grammar expressions, a common language for advanced parsers.
 //!
-//! gramex is a [framework](Matcher) for building [ergonomic](matches!), [efficient](Mode) and [advance](cursor) parsers, [tokenizers](cursor::match_map) and any form of [grammar based transformers](crate::grammar).
+//! gramex is a [framework](Matcher) for building [ergonomic](matches!), [efficient](Mode) and [advanced](cursor) parsers, [tokenizers](cursor::match_map) and any form of [grammar-based transformers](crate::grammar).
 //!
-//! it simplifies parsing by providing simple [matching constructs](parse!) with [expressive DSL](gram_ref), while also featuring enriched [imperative experience](cursor) for advance use cases.
+//! it simplifies parsing by providing simple [matching constructs](parse!) with an [expressive DSL](gram_ref), while also featuring an enriched [imperative experience](cursor) for advanced use cases.
 //!
 //! # features
 //! ## powerful core
-//! gramex is universal in its core, everything can be [`MatchAble`], from [`str`](mod@str) to [`[u8]`](bytes) to [`YourTokenList`](MatchAble#impl-quide), provided the required infrastructure.
+//! gramex is universal in its core, everything can be [`MatchAble`], from [`str`](mod@str) to [`[u8]`](bytes) to [`YourTokenList`](MatchAble#impl-guide), provided the required infrastructure.
 //!
-//! it also adhere to rust zero cost abstraction principle, it leverage the power of [GATs](Mode) to enable its [`Matcher`]s get monomorphized into highly optimized code doing only the required [features](Mode#features).
+//! it also adheres to rust's zero-cost abstraction principle, leveraging the power of [GATs](Mode) to enable its [`Matcher`]s to get monomorphized into highly optimized code doing only the required [features](Mode#features).
 //!
-//! it also utilize zero copy parsing, it uses and produces [slices](MatchAble::slice) of the input by default to minimize allocations.
+//! it also utilizes zero-copy parsing, using and producing [slices](MatchAble::slice) of the input by default to minimize allocations.
 //!
 //! ## simple DSL for simple cases
-//! gramex feature its own custom [DSL](gram_ref), inspired by the typical metasyntax language, it has rich semantics. including and not limited to: [repetitions](gram_ref#repetitions), [negations](gram_ref#not-operator), [lookaheads](gram_ref#near-operator), [intersections](gram_ref#and-expression), [alternations](gram_ref#or-expression) and [implications](gram_ref#imply-expression).
+//! gramex features its own custom [DSL](gram_ref); inspired by the typical metasyntax language, it has rich semantics, including but not limited to: [repetitions](gram_ref#repetitions), [negations](gram_ref#not-operator), [lookaheads](gram_ref#near-operator), [intersections](gram_ref#and-expression), [alternations](gram_ref#or-expression) and [implications](gram_ref#imply-expression).
 //!
-//! this grammar expressions support powerfull [capturing abilities](gram_ref#captures), with [nesting](gram_ref#structural-captures) and [enumeration](gram_ref#enumerated-captures) support, and [mapping](gram_ref#mapping) into [auto generated types](gram_ref#generated-items).
+//! this grammar expression supports powerful [capturing abilities](gram_ref#captures), with [nesting](gram_ref#structural-captures) and [enumeration](gram_ref#enumerated-captures) support, and [mapping](gram_ref#mapping) into [auto generated types](gram_ref#generated-items).
 //!
-//! this expressions can be used everywhere, declared inside [standalone definitions](crate::grammar), or used [inline](parse!) in the normal code, and even enriching the [imperative cursors](cursor::eat).
+//! these expressions can be used everywhere: declared inside [standalone definitions](crate::grammar), or used [inline](parse!) in normal code, and even enriching the [imperative cursors](cursor::eat).
 //!
-//! ## imperative cursors for advance cases
-//! gramex doesnt only generate simple parsers, it can empowers [advance parsers](cursor#why) through its imperative mode: the parsing [`cursor`]s.
+//! ## imperative cursors for advanced cases
+//! gramex doesn't only generate simple parsers, it can empower [advanced parsers](cursor#why) through its imperative mode: the parsing [`cursor`]s.
 //!
 //! in the cursor mode, the parsing is done using unconstrained typical [imperative flow](cursor#example), enriched and integrated with the whole gramex ecosystem, through [declarative](cursor::match_map) and composable [utilities](cursor::Cursor).
 //!
-//! cursors are typically used with custom tokens lists, which can be [automaticly derived](derive::derive_slice_matchable) with their own [dedicated matchers](derive::derive_enum_matcher).
+//! cursors are typically used with custom token lists, which can be [automatically derived](derive::derive_slice_matchable) with their own [dedicated matchers](derive::derive_enum_matcher).
 //!
 //! # quick showcase
 //! ```
@@ -56,7 +56,7 @@
 //! grammar! {
 //!     for str;
 //!     let ident: String = ('a'..'z' | 'A'..'Z' | '0'..'9' | '_')+;
-//!     // `=> expr` mapping of the matched section (binded as `nb`)
+//!     // `=> expr` mapping of the matched section (bound as `nb`)
 //!     let nb: i64 = '-'? ('0'..'9')+ => nb.parse().unwrap();
 //!     // `path<args>` compound matchers, `list<item, sep>`: list of `sep` seprated `item`s
 //!     let arr: Vec<Val<'src>> = '[' list:list<val, ','> ']' => list;
@@ -64,7 +64,7 @@
 //!     let val: enum = true:"true" | false:"false" | ident:ident | nb:nb | arr:arr;
 //! }
 //!
-//! // (input, offset) tuple with some utilities, for ergonomic advance cases
+//! // (input, offset) tuple with some utilities, for ergonomic advanced cases
 //! type Cur<'src> = SimpleCursor<'src, str>;
 //! fn parse_primary(cur: &mut Cur) -> Result<Expr, MatchError> {
 //!     // `try_eat`: optional match by matcher, even from grammer declarations
@@ -95,7 +95,7 @@
 //! ```
 //!
 //! # feature flags
-//! gramex is minimal by default, and its featureset can be fainly selected by its feature flags.
+//! gramex is minimal by default, and its feature set can be finely selected by its feature flags.
 //! - `std` (enabled by default): support for the standard library types.
 //! - `macros`: enable all the macros.
 //! - `str`: enable [`str`](mod@str) matching.

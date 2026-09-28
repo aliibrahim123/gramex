@@ -11,14 +11,14 @@ gramex is universal in its core, everything can be `MatchAble`, from `str` to `[
 
 it also adhere to rust zero cost abstraction principle, it leverage the power of GATs to enable its `Matcher`s get monomorphized into highly optimized code doing only the required features.
 
-it also utilize zero copy parsing, it uses and produces slices of the input by default to minimize allocations.
+it also utilizes zero-copy parsing, using and producing slices of the input by default to minimize allocations.
 
 ## simple DSL for simple cases
 gramex feature its own custom DSL, inspired by the typical metasyntax language, it has rich semantics. including and not limited to: repetitions, negations, lookaheads, intersections, alternations and implications.
 
 this grammar expressions support powerfull capturing abilities, with nesting and enumeration support, and mapping into auto generated types.
 
-this expressions can be used everywhere, declared inside standalone definitions, or used inline in the normal code, and even enriching the imperative cursors.
+these expressions can be used everywhere: declared inside standalone definitions, or used inline in the normal code, and even enriching the imperative cursors.
 
 ## imperative cursors for advance cases
 gramex doesnt only generate simple parsers, it can empowers advance parsers through its imperative mode: the parsing `cursor`s.
@@ -56,7 +56,7 @@ fn basics() {
 grammar! {
     for str;
     let ident: String = ('a'..'z' | 'A'..'Z' | '0'..'9' | '_')+;
-    // `=> expr` mapping of the matched section (binded as `nb`)
+    // `=> expr` mapping of the matched section (bound as `nb`)
     let nb: i64 = '-'? ('0'..'9')+ => nb.parse().unwrap();
     // `path<args>` compound matchers, `list<item, sep>`: list of `sep` seprated `item`s
     let arr: Vec<Val<'src>> = '[' list:list<val, ','> ']' => list;

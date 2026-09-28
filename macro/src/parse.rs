@@ -2,7 +2,7 @@
 
 // this module incoperate alot of recovery strategies, failures doesnt stop parsing nor capture resolving, and recovered ast is used for resilient syntax highlighting.
 
-// expressions are naivly consumed through `!','+` matcher for simplicity reasons, this work most of the time as commas are usually used inside groups, though top level generic path segment and closure arguments must be enclosed inside paranthesis.
+// expressions are naively consumed through `!','+` matcher for simplicity reasons, this works most of the time as commas are usually used inside groups, though top-level generic path segments and closure arguments must be enclosed inside parentheses.
 
 use chunked_quote::{quote, token};
 use proc_macro2::{
@@ -116,7 +116,7 @@ pub enum Expr {
 		cond: Box<Expr>,
 		expr: Box<Expr>,
 	},
-	/// duppy placeholder for error encountered during parsing
+	/// dummy placeholder for error encountered during parsing
 	Error,
 }
 
@@ -127,7 +127,7 @@ fn is_expr_end(cur: &Cursor) -> bool {
 		|| cur.test_punct(';') // term end
 		|| cur.test_punct('>') // call atom arg end
 		|| cur.test_multi_punct(['=', '>']) // the map operator
-		|| cur.test_kw("let") // to allow forgetten `;` recovery
+		|| cur.test_kw("let") // to allow forgotten `;` recovery
 }
 
 /// try parse simple path: `"::"? list<ident, "::">`
@@ -218,7 +218,7 @@ fn parse_atom_common(cur: &mut Cursor) -> Option<Atom> {
 		Some(Atom::Matcher(lit.into()))
 	} else if let Some(block) = cur.try_group(Brace) {
 		let matcher = match block.stream().into_iter().next() {
-			// transform clojure into `MathFn`
+			// transform closure into `MatchFn`
 			Some(TokenTree::Punct(punct)) if punct.as_char() == '|' => {
 				token!((::gramex::general::MatchFn::new_infer(#{block.stream()})))
 			}
@@ -277,7 +277,7 @@ fn try_parse_capture(cur: &mut Cursor, flags_span: Option<Span>) -> Option<Expr>
 	let ident = cur.try_ident()?;
 	let rep = parse_rep(cur);
 
-	// resolve disambiguaty between capture and group atom
+	// resolve disambiguity between capture and group atom
 	if !(cur.test_punct('=') || cur.test_punct(':') && !cur.test_multi_punct([':', ':']))
 	{
 		cur.rewind(start);

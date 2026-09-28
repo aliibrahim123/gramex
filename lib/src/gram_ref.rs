@@ -1,9 +1,9 @@
-//! # grammmar reference
-//! the grammar expressions is a matching construct / DSL inspired by the typical metasyntax languages with a rust flavor.
+//! # grammar reference
+//! the grammar expressions are matching constructs / a DSL inspired by typical metasyntax languages with a rust flavor.
 //!
 //! these expressions work on all [`MatchAble`] types, and they get transformed into efficient [raw `Matcher`](Matcher#impl) style matching logic.
 //!
-//! they can be used in different contexes, as standalone items or inlined with the code, by the different macros provided by gramex: [`grammar!`], [`matches!`], [`try_match!`], [`check!`], [`parse!`], [`matcher!`], [`eat!`], [`try_eat!`], [`test!`], and [`match_map!`].
+//! they can be used in different contexts, as standalone items or inlined with the code, by the different macros provided by gramex: [`grammar!`], [`matches!`], [`try_match!`], [`check!`], [`parse!`], [`matcher!`], [`eat!`], [`try_eat!`], [`test!`], and [`match_map!`].
 //!
 //! the grammar expressions are composed of [atoms](#atoms) representing atomic patterns, and expressions chains representing compound patterns.
 //!
@@ -21,9 +21,9 @@
 //! ```gramex
 //! let any_atom = '_';
 //! ```
-//! the any atom (`_`) matches exactly 1 [token](MatchAble::Token), and mostly fail due to incomplete input.
+//! the any atom (`_`) matches exactly 1 [token](MatchAble::Token), and mostly fails due to incomplete input.
 //!
-//! under the hode, it calls [`MatchAble::skip_n(n: 1)`](MatchAble::skip_n) on the matched type.
+//! under the hood, it calls [`MatchAble::skip_n(n: 1)`](MatchAble::skip_n) on the matched type.
 //!
 //! ```
 //! assert!(matches!("a", _));
@@ -36,7 +36,7 @@
 //! ```
 //! value atoms match against a [`Matcher`] resolved by the tokens defining it.
 //!
-//! these tokens can be literials, [simple paths](https://doc.rust-lang.org/reference/paths.html#simple-paths) including identifiers, and expression blocks that get inserted directly in the generated code.
+//! these tokens can be literals, [simple paths](https://doc.rust-lang.org/reference/paths.html#simple-paths) including identifiers, and expression blocks that get inserted directly in the generated code.
 //!
 //! the [`Matcher`] is called with only the required [`Mode` features](Mode#features), and its error is directly propagated.
 //!
@@ -53,11 +53,11 @@
 //! ```gramex
 //! let range_atom = value_atom ".." value_atom;
 //! ```
-//! range atom match against a range of values defined by 2 [value atoms](#value-atoms).
+//! range atoms match against a range of values defined by 2 [value atoms](#value-atoms).
 //!
-//! the bounds that can be of any atom type but must resolve to the same underlying type.
+//! the bounds can be of any atom type but must resolve to the same underlying type.
 //!
-//! range atom get transformed into a [`RangeInclusive`] that must implement [`Matcher`].
+//! a range atom gets transformed into a [`RangeInclusive`] that must implement [`Matcher`].
 //!
 //! ```
 //! assert!(matches!("a", 'a'..'z'));
@@ -70,11 +70,11 @@
 //! let matcher = ("for" matched_type:ty)? expr ("=>" rust_expr)?;
 //! let call_atom = path "<" args:list<matcher, ','> ">";
 //! ```
-//! the call atom matches a compound matcher by a set of argument.
+//! the call atom matches a compound matcher by a set of arguments.
 //!
-//! a compound matcher is a `Fn(..Matcher) -> Matcher`, the passed arguments are transformed into ananymous [`Matcher`]s and passed to the function, then its return [`Matcher`] is matched against.
+//! a compound matcher is a `Fn(..Matcher) -> Matcher`, the passed arguments are transformed into anonymous [`Matcher`]s and passed to the function, then its return [`Matcher`] is matched against.
 //!
-//! the arguments are matcher declerations with a root expression, an optional matched type specifier (default to the current one), and an optional [map](#mapping) for the root [capture](#captures).
+//! the arguments are matcher declarations with a root expression, an optional matched type specifier (default to the current one), and an optional [map](#mapping) for the root [capture](#captures).
 //!
 //! ```rust
 //! assert!(matches!("ababa", list<"a", "b">));
@@ -84,7 +84,7 @@
 //! ```gramex
 //! let group_atom = '(' expr ')';
 //! ```
-//! the group expression is a grammer expression enclosed by paranthesis.
+//! the group expression is a grammar expression enclosed by parentheses.
 //!
 //! ```
 //! assert!(matches!("1", !('a'..'z')));
@@ -101,7 +101,7 @@
 //! ### not operator
 //! the not operator `!` matches exactly one [token](MatchAble::Token) if the [atom](#atoms) doesnt match.
 //!
-//! the not operator also fail at incomplete input.
+//! the not operator also fails at incomplete input.
 //!
 //! ```
 //! assert!(matches!("a", !"bb"));
@@ -112,7 +112,7 @@
 //! ### near operator
 //! the near operator `~` matches the [atom](#atoms) without advancing.
 //!
-//! can be combined with not for inverted result, incomplete input are positive.
+//! can be combined with not for inverted results, incomplete input is positive.
 //!  
 //! ```
 //! assert!(matches!("a", ~'a' _));
@@ -126,7 +126,7 @@
 //!  (range: '[' min?:nb ".." max?:nb ']');
 //! ```
 //!
-//! repetitions matches an [atom](#atoms) some interval of times.
+//! repetitions match an [atom](#atoms) some interval of times.
 //!
 //! #### shorthands
 //! `?` match the [atom](#atoms) 0 or 1 times.
@@ -153,10 +153,10 @@
 //! assert!(!matches!("a", "a"[2]));
 //! ```
 //!
-//! #### canocical form
+//! #### canonical form
 //! `[min..max]` match the [atom](#atoms) between `min` and `max` (inclusive) times.
 //!
-//! `min` and `max` are optional and default to `0` and infinity respectifily.
+//! `min` and `max` are optional and default to `0` and infinity respectively.
 //! ```
 //! assert!(matches!("aaa", "a"[2..4]));
 //! assert!(!matches!("a", "a"[2..4]));
@@ -165,14 +165,14 @@
 //! ```
 //!
 //! #### notes
-//! unbounded repetition is greedy eating till mismatch or end of input, and bounded one stop instantly when hitting max.
+//! unbounded repetition is greedy eating till mismatch or end of input, and a bounded one stops instantly when hitting max.
 //! ```
 //! assert!(matches!("aaab", "a"+ "b"));
 //! assert!(!matches!("aaaa", "a"+ "a"));
 //! assert!(matches!("aaaa", "a"[3] "a"));
 //! ```
 //!
-//! with [not](#not-operator), the repetition takes precedence, while with [near](#near-operator) and its negated form, it take precedence.
+//! with [not](#not-operator), the repetition takes precedence, while with [near](#near-operator) and its negated form, it takes precedence.
 //!
 //! ```
 //! matches!("abc", !"d"[3]) // <=> matches!("abc", (!"d")[3])
@@ -188,7 +188,7 @@
 //! ```gramex
 //! let seq = expr+;
 //! ```
-//! the sequence expression match multiple expressions separated by whitespaces in order.
+//! the sequence expression matches multiple expressions separated by whitespace in order.
 //!
 //! ```
 //! assert!(matches!("abc", "a" "b"? !"d"));
@@ -201,9 +201,9 @@
 //! ```
 //! the or expression matches one of multiple expressions separated by `|`.
 //!
-//! the expressions get matched in order with the same start and the first match win.
+//! the expressions get matched in order with the same start and the first match wins.
 //!
-//! if an expression is an [imply](#imply-expression) and its condition matched, the or propagate the result of its then expression instead of matching the rest of the expressions.
+//! if an expression is an [imply](#imply-expression) and its condition matched, the or propagates the result of its then expression instead of matching the rest of the expressions.
 //!
 //! ```
 //! assert!(matches!("b", 'a' | 'b' | 'c'));
@@ -218,7 +218,7 @@
 //! ```
 //! the and expression matches all of multiple expressions separated by `&` with the same section.
 //!
-//! the and expression first matches its first expression, then it [slices](MatchAble::slice) the input till where the first end, then it match the rest on it in order with the same start.
+//! the and expression first matches its first expression, then it [slices](MatchAble::slice) the input till where the first ends, then it matches the rest on it in order with the same start.
 //!
 //! the and expression requires [`MatchAble::Slice`] to be [`MatchAble`].
 //!
@@ -232,9 +232,9 @@
 //! ```gramex
 //! let imply = cond:expr "->" then:expr;
 //! ```
-//! the imply expression express implication logical relation between two expressions.
+//! the imply expression expresses a logical implication between two expressions.
 //!
-//! if the condition matches, it match the then expression after it, else it match nothing.
+//! if the condition matches, it matches the then expression after it, otherwise it matches nothing.
 //!
 //! ```
 //! assert!(matches!("ab", 'a' -> 'b'));
@@ -249,14 +249,14 @@
 //! ```
 //! the capture matches an expression then extract the matched section as a result.
 //!
-//! there are 2 syntax for captures, a shorthand one with an [atom](#atoms) `name:atom` and a full version with an expression `(name = expr)`.
+//! there are 2 syntaxes for captures, a shorthand one with an [atom](#atoms) `name:atom` and a full version with an expression `(name = expr)`.
 //!
 //! ```
 //! assert_eq!(try_match!("abc", 'a' bc:"bc"), Some(("bc",)));
 //! assert_eq!(try_match!("abc", 'a' (bc = !('0'..'9') 'c')), Some(("bc",)));
 //! ```
 //!
-//! captures are allowed in most cases, but are forbidden in [negated units](#not-operator), non optional specified [repetition](#repetitions) units, arguments of non captured [call atoms](#call-atom), and non capturing macros like [`matches!`].
+//! captures are allowed in most cases, but are forbidden in [negated units](#not-operator), non-optional specified [repetition](#repetitions) units, arguments of non-captured [call atoms](#call-atom), and non-capturing macros like [`matches!`].
 //!
 //! ```
 //! try_match!("", !(_ not_allowed1:_) (_ not_allowed2:_)* list(not_allowed3:_, ','));
@@ -265,9 +265,9 @@
 //! ```
 //!
 //! ### repetition
-//! captures support [repetition](#repetitions), either by infering it from the optionality of the path ([optional](#repetitions) units, [or](#or-expression) and [imply](#imply-expression) expressions), or by manually specifing it.
+//! captures support [repetition](#repetitions), either by inferring it from the optionality of the path ([optional](#repetitions) units, [or](#or-expression) and [imply](#imply-expression) expressions), or by manually specifing it.
 //!
-//! repetition override the capture resolved type, it become [`Option<T>`] if repetition is optional, and [`Vec<T>`] otherwise.
+//! repetition overrides the capture resolved type, it becomes [`Option<T>`] if repetition is optional, and [`Vec<T>`] otherwise.
 //!
 //! ```
 //! assert_eq!(try_match!("a", a?:'a'), Some((Some("a"),)));
@@ -279,9 +279,9 @@
 //! ```gramex
 //! let cap_type = type | "struct" ident? | "enum" ident?;
 //! ```
-//! the capture type specifier specifies the base type of the capture (without the [repetition](#repetition)) when requried.
+//! the capture type specifier specifies the base type of the capture (without the [repetition](#repetition)) when required.
 //!
-//! captures doesnt always require to specify its type, only when the default type doesnt work in contexes requiring it: [terms](grammar!#term) and matchers root capture, [generated items](#generated-items) nested captures.
+//! captures don't always require specifying their type, only when the default type doesn't work in contexts requiring it: [terms](grammar!#term) and matchers root capture, [generated items](#generated-items) nested captures.
 //!
 //! inside the type specifier, a `'src` lifetime is given related to the [matched value](MatchAble) lifetime.
 //!
@@ -297,9 +297,9 @@
 //! ```
 //!
 //! ### mapping
-//! mapping is an optional rust expression that transform the matched section into a different value / type.
+//! mapping is an optional rust expression that transforms the matched section into a different value / type.
 //!
-//! it is specified though `=> expr` after the expression, and the matched section is binded as the capture name.
+//! it is specified through `=> expr` after the expression, and the matched section is bound as the capture name.
 //!
 //! note that a [type specifier](#type-specifier) may be needed when using it.
 //!
@@ -311,14 +311,14 @@
 //! ```
 //!
 //! ## capture kinds
-//! capture can be of different kinds depending on the properties of its expression.
+//! captures can be of different kinds depending on the properties of their expressions.
 //!
 //! ### slice captures
 //! the most common captures where the expression doesnt contain any nested capture.
 //!
 //! they just extract the matched section through [`MatchAble::slice`], and have a default type of [`MatchAble::Slice`].
 //!
-//! they support [mapping](#mapping), also they apply [`Into::into`] on the matched section if a [type](#type-specifier) is specified wihtout a [map](#mapping).
+//! they support [mapping](#mapping), they also apply [`Into::into`] on the matched section if a [type](#type-specifier) is specified without a [map](#mapping).
 //!
 //! ```
 //! assert_eq!(try_match!("abc", (abc = 'a' 'b' 'c')), Some(("abc",)));
@@ -337,7 +337,7 @@
 //!
 //! they resolve to the [`Capture`](Matcher::Capture) returned by the atom [`Matcher`].
 //!
-//! they support [mapping](#mapping) and [`Into::into`] convertion, and may need to specify their [type](#type-specifier) unless they are [call atom](#call-atom) to a local [term](grammar!#term).
+//! they support [mapping](#mapping) and [`Into::into`] conversion, and may need to specify their [type](#type-specifier) unless they are a [call atom](#call-atom) to a local [term](grammar!#term).
 //!
 //! ```
 //! assert_eq!(try_match!("abc", abc:{Box::new("abc")}), Some(("abc",)));
@@ -350,9 +350,9 @@
 //! ### structural captures
 //! structural captures have expressions containing nested captures.
 //!
-//! by default they resolve to tuple of the nested captures captured values, unless a [type](#type-specifier) is specified, then they construct that type as a struct of fields taken from the nested captures.
+//! by default they resolve to a tuple of the nested captures' captured values, unless a [type](#type-specifier) is specified, then they construct that type as a struct of fields taken from the nested captures.
 //!
-//! if a [map expression](#mapping) is given, the nested captures values are binded as their names, and the capture type become the map result.
+//! if a [map expression](#mapping) is given, the nested captures' values are bound as their names, and the capture type becomes the map result.
 //!
 //! ```
 //! assert_eq!(try_match!("abc", a:'a' b:'b' c:'c'), Some(("a","b", "c")));
@@ -375,7 +375,7 @@
 //! ### enumerated captures
 //! enumerated captures have root [or expression](#or-expression) containing nested captures.
 //!
-//! they resolve to a [specified](#type-specifier) enum where each or branch resolve to a specific variant.
+//! they resolve to a [specified](#type-specifier) enum where each or branch resolves to a specific variant.
 //!
 //! variants are specified from a single nested capture in the branch where they become `CapName(cap_type)`, a `None` variant is used if the branch doesnt have a capture.  
 //!
@@ -397,13 +397,13 @@
 //! ```
 //!
 //! ## generated items
-//! in grammar decleration, [structural](#structural-captures) and [enumerated](#enumerated-captures) captures can generate there own items, structs and enums respectifilly.
+//! in grammar declarations, [structural](#structural-captures) and [enumerated](#enumerated-captures) captures can generate their own items, structs and enums respectively.
 //!
-//! these types are generated by specifing `struct ident?` or `enum ident?` in the [type specifier](#type-specifier), these types are named as `ident` if given, else the pascal case of the capture name.
+//! these types are generated by specifying `struct ident?` or `enum ident?` in the [type specifier](#type-specifier), these types are named as `ident` if given, else the pascal case of the capture name.
 //!
-//! the generated items are public, has a `'src` lifetime, derive `Debug`, and are defined directly in the outer scope.
+//! the generated items are public, have a `'src` lifetime, derive `Debug`, and are defined directly in the outer scope.
 //!
-//! a [slice capture](#slice-captures) can generate a struct type, which become `Struct<'src>(MatchAble::Slice)`.
+//! a [slice capture](#slice-captures) can generate a struct type, which becomes `Struct<'src>(MatchAble::Slice)`.
 //!
 //! ```
 //! grammar!{

@@ -3,7 +3,7 @@
 // matching is done inside matcher struct / inside inlined expression, using nested labeled blocks that endless branching and primitive offset logic
 // everything is generalized over matching mode using guards and selectors.
 // `__off`: current offset, `__value`: matched value, `__cap__ident`: a capture, `__`: `gramex::__private`, `__T`: `gramex::*::T` to avoid collisions.
-// will generate a tone of code that is highly optimizable by rustc, but is still enourmess
+// will generate a ton of code that is highly optimizable by rustc, but is still enormous
 // hardwrite your matchers if you dont like the generated code, or use cursors
 
 use std::cell::Cell;
@@ -403,7 +403,7 @@ fn gen_or_branch(
 ) {
 	chunk!(stream,
 		#do { before(stream, ind) }
-		// specilization of `Expr::Imply` in `Expr::Or`
+		// specialization of `Expr::Imply` in `Expr::Or`
 		#if let Expr::Imply { cond, expr } = expr #{
 			if #do { gen_expr_inline(stream, cond, &or_ctx.no_err()) }.is_ok() {
 				// target parent ctx on errors breaks
@@ -819,7 +819,7 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 					let Self(#for arg in args #{ #arg, }) = self;
 				}
 				#if term.cap.map.is_some() && in_matcher #{
-					// wihtout this the matcher const would overlap with the matched section binding in mapping
+					// without this the matcher const would overlap with the matched section binding in mapping
 					# #[doc(hidden)]
 					fn #{&term.name} () {}
 				}
@@ -828,7 +828,7 @@ pub fn gen_term(mut stream: &mut TokenStream, term: &Term, matched_type: &TokenS
 	);
 }
 
-/// generate ananymous `Matcher`
+/// generate anonymous `Matcher`
 pub fn gen_matcher(mut stream: &mut TokenStream, matcher: &Matcher) {
 	let Some(matched_type) = matcher.matched_type.as_ref() else { return };
 	chunk!(stream,
@@ -941,7 +941,7 @@ pub fn gen_match_map(
 		let __value = <_ as Cursor>::input(#cursor);
 		let mut __cap__root = None;
 
-		// use enum capture inspired approuch
+		// use an enum-capture-inspired approach
 		let __start = <_ as Cursor>::off(#cursor);
 		#for arm in arms #{
 			let __off = <_ as Cursor>::off_mut(#cursor);

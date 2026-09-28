@@ -1,6 +1,6 @@
 [package]
 name = "gramex"
-description = "common language for advance parsers"
+description = "common language for advanced parsers"
 edition = "2024"
 version = "0.2.3"
 readme = "../readme.md"

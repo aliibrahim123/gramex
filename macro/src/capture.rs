@@ -1,4 +1,4 @@
-//! symantic analysis for captures: validation, type resolution, item generation, kind resolution..
+//! semantic analysis for captures: validation, type resolution, item generation, kind resolution..
 
 use chunked_quote::{chunk, quote};
 use proc_macro2::{Ident, Span, TokenStream, TokenTree};
@@ -119,7 +119,7 @@ pub struct Context<'src, 'b> {
 	pub errors: &'src mut Vec<Error>,
 }
 
-/// recursivly resolve info for all captures in the expression tree
+/// recursively resolve info for all captures in the expression tree
 fn resolve_captures(
 	expr: &mut Expr, is_optional: bool, parent: &mut CapParent, ctx: &mut Context,
 ) {
@@ -197,7 +197,7 @@ pub fn forbid_captures(expr: &Expr, errors: &mut Vec<Error>) {
 	}
 }
 
-/// check for capture presence in a expression tree
+/// check for capture presence in an expression tree
 fn has_capture(expr: &Expr) -> bool {
 	match expr {
 		Expr::And(exprs) | Expr::Seq(exprs) | Expr::Or(exprs) => {
@@ -239,7 +239,7 @@ fn resolve_gen_type(
 	let item_ident = item_ident.take().unwrap_or_else(|| pascal_case(cap_ident));
 
 	let DefType::Decl { items, .. } = ctx.def_type else {
-		let msg = "can not use generated capture type outside grammar declerations";
+		let msg = "can not use generated capture type outside grammar declarations";
 		err!(ctx, msg, cap_ident.span());
 		return Err(());
 	};
@@ -313,7 +313,7 @@ fn gen_enum(
 		pub enum #item<'src> {
 			#if has_none #{ None, }
 			#do { items_def.extend(variants_def.unwrap()) }
-			// maybe all variants be owned, Infalliable to remove from exhustive check
+			// maybe all variants be owned, Infallible to remove from exhaustive check
 			# #[doc(hidden)] __LifeMarker (
 				__::PhantomData<&'src ()>, __::Infallible
 			),
@@ -512,7 +512,7 @@ fn resolve_capture(
 ) -> Result<(), ()> {
 	let res = try_resolve_capture(cap, is_optional, parent, ctx);
 	if let Err(()) = res {
-		// mybe ok nested captures but errored self
+		// maybe ok nested captures but errored self
 		strip_info(&mut cap.expr);
 	}
 	res

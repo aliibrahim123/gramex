@@ -5,7 +5,7 @@ use crate::{
 	result::{Expected, MatchError, MatchResult},
 };
 
-/// `match_do` generification for mathcing by token
+/// `match_do` generalization for matching by token
 #[doc(hidden)]
 pub fn match_token<'src, M: Mode, T: MatchAble + ?Sized>(
 	value: &'src T, off: &mut usize, pred: impl FnOnce(T::Token<'src>) -> Option<usize>,
@@ -22,7 +22,7 @@ pub fn match_token<'src, M: Mode, T: MatchAble + ?Sized>(
 	}
 }
 
-/// `match_do` generification for mathcing by slice
+/// `match_do` generalization for matching by slice
 #[doc(hidden)]
 pub fn match_slice<'src, M: Mode, T: MatchAble + ?Sized, C>(
 	value: &'src T, off: &mut usize, size: usize,
@@ -123,7 +123,7 @@ macro_rules! define_ref_matcher {
 #[doc(hidden)]
 pub use {define_ref_matcher, define_slice_matcher, define_token_matcher};
 
-/// derive [`MatchAble`] for slice powered types.
+/// derive [`MatchAble`] for slice-powered types.
 ///
 /// ```gramex
 /// let type = box:ident '(' '&' '[' token:type ']' ')';
@@ -132,13 +132,13 @@ pub use {define_ref_matcher, define_slice_matcher, define_token_matcher};
 /// let body = type ',' matchers (',' expected)?;
 /// ```
 ///
-/// `derive_slice_matchable` generate a [`MatchAble`] implementation for slice newtype structs with some core [`Matcher`](crate::Matcher).
+/// `derive_slice_matchable` generates a [`MatchAble`] implementation for slice newtype structs with some core [`Matcher`](crate::Matcher).
 ///
 /// slice newtype structs are any struct of kind `struct box<'src>(&'src [token])`.
 ///
-/// the `type` argument is `box(&[token])` where `box` is the [`MatchAble`] and `token` is its [`Token`](MatchAble::Token), `item` is given a `'slice` lifetime linked to the tokens slice.
+/// the `type` argument is `box(&[token])` where `box` is the [`MatchAble`] and `token` is its [`Token`](MatchAble::Token), `token` is given a `'slice` lifetime linked to the tokens slice.
 ///
-/// the generated [`MatchAble`] implementation has [`Slice`](MatchAble::Slice) of `box`, [`Token`](MatchAble::Token) of `&token`, slice indexes as the offsets, and other methods redirecting the inner slice ones.
+/// the generated [`MatchAble`] implementation has [`Slice`](MatchAble::Slice) of `box`, [`Token`](MatchAble::Token) of `&token`, slice indices as the offsets, and other methods redirecting the inner slice ones.
 ///
 /// the `matchers` argument can be:
 /// - `false`: no extra [`Matcher`](crate::Matcher)s generated.
@@ -147,10 +147,10 @@ pub use {define_ref_matcher, define_slice_matcher, define_token_matcher};
 ///
 /// the [`Matcher`](crate::Matcher)s capture the [`MatchAble::Slice`] they match.
 ///
-/// the `expected` is optional part that specifies how [`Expected`] is created, it can be:
+/// the `expected` is an optional part that specifies how [`Expected`] is created, it can be:
 /// - `None`: [`Expected::None`].
-/// - `Debug`: [`Expected::A`] of the matchers [`Debug`](core::fmt::Debug).
-/// - `Display`: [`Expected::A`] of the matchers [`Display`](core::fmt::Display).
+/// - `Debug`: [`Expected::A`] of the matcher's [`Debug`](core::fmt::Debug).
+/// - `Display`: [`Expected::A`] of the matcher's [`Display`](core::fmt::Display).
 ///
 /// # example
 /// ```
@@ -309,11 +309,11 @@ pub use derive_slice_matchable;
 /// let body = "for" matched_type:type (',' field)? (',' expected)?;
 /// ```
 ///
-/// the `derive_enum_matcher` is an attribute macro applied on enums that for each variant define a [`Matcher`](crate::Matcher) that matches one [token](MatchAble::Token) of that variant.
+/// the `derive_enum_matcher` is an attribute macro applied on enums that for each variant defines a [`Matcher`](crate::Matcher) that matches one [token](MatchAble::Token) of that variant.
 ///
-/// it take the [`MatchAble`] type, and define the [`Matcher`](crate::Matcher) as kebab case of the variant name.
+/// it takes the [`MatchAble`] type, and defines the [`Matcher`](crate::Matcher) as kebab case of the variant name.
 ///
-/// if the variant is tuple, the [`Capture`](crate::Matcher::Capture) is a tuple of the variant fields, else it is the matched [`Token`](MatchAble::Token).
+/// if the variant is a tuple, the [`Capture`](crate::Matcher::Capture) is a tuple of the variant fields, else it is the matched [`Token`](MatchAble::Token).
 ///
 /// the `field` argument is an optional field path that specify where is the enum inside the token, if not specified, the enum is assumed to be the token.
 ///

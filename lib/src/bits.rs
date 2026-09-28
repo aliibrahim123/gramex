@@ -1,13 +1,13 @@
 //! bits matching implementation
 //!
-//! when `bits` feature is enabled, bits matching get enabled with additional extra [`Matcher`]s through this module.
+//! when `bits` feature is enabled, bits matching gets enabled with additional extra [`Matcher`]s through this module.
 //!
 //! # [`Bits`]
-//! [`Bits`] is the core structure in bit matching, it represend a bitfield of maximum 64 bits.
+//! [`Bits`] is the core structure in bit matching, it represents a bitfield of maximum 64 bits.
 //!
 //! [`Bits`] can be converted from and to all integer types, byte arrays and bools.
 //!
-//! it is created through [`b`] function.
+//! it is created through the [`b`] function.
 //!
 //! ```
 //! assert_eq!(b(3, 0b101), Bits { value: 0b101, len: 3 });
@@ -36,11 +36,11 @@
 //! ```
 //!
 //! # core [`Matcher`]s
-//! for each endian wrapper, [`Matcher`] is implemented for [`Bits`], [`bool`], `{i,u}{8,16,32}`. in addition for the universal `&Bits`, [`Box<Bits>`], [`Rc<Bits>`](alloc_crate::rc::Rc) and [`Arc<Bits>`](alloc_crate::sync::Arc).
+//! for each endian wrapper, [`Matcher`] is implemented for [`Bits`], [`bool`], `{i,u}{8,16,32}`. in addition, for the universal `&Bits`, [`Box<Bits>`], [`Rc<Bits>`](alloc_crate::rc::Rc) and [`Arc<Bits>`](alloc_crate::sync::Arc).
 //!
-//! range matching is implemented through [`BitRange`], created by [`br`] function.
+//! range matching is implemented through [`BitRange`], created by the [`br`] function.
 //!
-//! all this [`Matcher`]s matches with the endian wrapper slice they matched.
+//! all these [`Matcher`]s match against the endian wrapper slice.
 //!
 //! ```
 //! let bits = LBits::new(5, 0b10101);
@@ -75,9 +75,9 @@ use crate::{
 
 /// a bitfield.
 ///
-/// `Bits` is a bitfield of maximum 64 bits, able to be matched with gramex.
+/// `Bits` is a bitfield of a maximum of 64 bits, able to be matched with gramex.
 ///
-/// it is created through [`b`] function, and it is a core [`Matcher`] for [`LBits`] and [`BBits`].
+/// it is created through the [`b`] function, and it is a core [`Matcher`] for [`LBits`] and [`BBits`].
 ///
 /// it is convertible from and to:
 /// - [`u8`], [`u16`], [`u32`], [`u64`], [`usize`].
@@ -111,7 +111,7 @@ pub struct Bits {
 
 /// create a [`Bits`] of given `value` and `len`.
 ///
-/// it panic if `len` is outside `1..=64`, or `value` is greater than `len` capacity.
+/// it panics if `len` is outside `1..=64`, or `value` is greater than `len` capacity.
 ///
 /// # example
 /// ```
@@ -294,11 +294,11 @@ impl Binary for Bits {
 
 /// little endian [`Bits`] wrapper.
 ///
-/// `LBits` is a wrapper around [`Bits`] which implement [`MatchAble`] in little endian direction.
+/// `LBits` is a wrapper around [`Bits`] which implements [`MatchAble`] in the little-endian direction.
 ///
 /// see the [module documentation](crate::bits) for more info.
 ///
-/// it is convertable and comparable between [`Bits`] and [`BBits`].
+/// it is convertible and comparable between [`Bits`] and [`BBits`].
 ///
 /// # example
 /// ```
@@ -312,11 +312,11 @@ pub struct LBits(pub Bits);
 
 /// big endian [`Bits`] wrapper.
 ///
-/// `BBits` is a wrapper around [`Bits`] which implement [`MatchAble`] in big endian direction.
+/// `BBits` is a wrapper around [`Bits`] which implements [`MatchAble`] in the big-endian direction.
 ///
 /// see the [module documentation](crate::bits) for more info.
 ///
-/// it is convertable and comparable between [`Bits`] and [`LBits`].
+/// it is convertible and comparable between [`Bits`] and [`LBits`].
 ///
 /// # example
 /// ```
@@ -331,7 +331,7 @@ pub struct BBits(pub Bits);
 impl LBits {
 	/// create a new `LBits` of given `value` and `len`.
 	///
-	/// panic if `len` is outside `1..=64`.
+	/// panics if `len` is outside `1..=64`.
 	#[inline]
 	pub fn new(len: u8, value: u64) -> LBits {
 		LBits(b(len, value))
@@ -341,7 +341,7 @@ impl BBits {
 	#[inline]
 	/// create a new `BBits` of given `value` and `len`.
 	///
-	/// panic if `len` is outside `1..=64`.
+	/// panics if `len` is outside `1..=64`.
 	pub fn new(len: u8, value: u64) -> BBits {
 		BBits(b(len, value))
 	}
@@ -495,9 +495,9 @@ fn to_bin(value: u64, len: u8) -> LeanString {
 
 /// range of [`Bits`] field.
 ///
-/// it is a [`RangeInclusive`] equivelant for [`Bits`] facilatating bit range matching.
+/// it is a [`RangeInclusive`] equivalent for [`Bits`] facilitating bit range matching.
 ///
-/// it is created by [`br`] function.
+/// it is created by the [`br`] function.
 ///
 /// # example
 /// ```
@@ -523,7 +523,7 @@ impl BitRange {
 
 /// create a new [`BitRange`] given a `len` and a `range`.
 ///
-/// it panic if `len` is outside `1..=64`, or `start` or `end` are larger than `len` capacity.
+/// it panics if `len` is outside `1..=64`, or `start` or `end` are larger than `len` capacity.
 ///
 /// # example
 /// ```
@@ -630,7 +630,7 @@ impl_matching!(BBits, bit_extract_be(.., len));
 
 /// matches a `len` sized [`Bits`] field by a predicate.
 ///
-/// `a_b` produce a [`Matcher`] that matches a `len` sized [`Bits`] field, then test its value by `pred`, if `pred` return `true` it matches with the field, else it fail.
+/// `a_b` produces a [`Matcher`] that matches a `len` sized [`Bits`] field, then tests its value by `pred`; if `pred` returns `true` it matches with the field, else it fails.
 ///
 /// # example
 /// ```

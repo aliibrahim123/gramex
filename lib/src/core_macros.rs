@@ -1,6 +1,6 @@
 /// define a grammar declaration.
 ///
-/// the `grammar` macro generate matchers with their [generated items](gram_ref#generated-items) from a set of [terms](#term).
+/// the `grammar` macro generates matchers with their [generated items](gram_ref#generated-items) from a set of [terms](#term).
 ///
 /// ```gramex
 /// let body = "for" matched:type ';' terms*:term;
@@ -13,7 +13,7 @@
 ///     '=' expr ("=>" map:rust_expr)? ';';
 /// ```
 ///
-/// a term is a [grammar expression](gram_ref) identified by a `name` that get transformed into a [`Matcher`] that matches by this expression.
+/// a term is a [grammar expression](gram_ref) identified by a `name` that gets transformed into a [`Matcher`] that matches by this expression.
 ///
 /// ```
 /// grammar! {
@@ -43,7 +43,7 @@
 /// assert_eq!(try_match("abc", val), Some(value::Ident("abc")));
 /// ```
 ///
-/// `args` are optional [`Matcher`] arguments that get binded to the expression and transform the generated [`Matcher`] into [compound matcher](gram_ref#call-atom).
+/// `args` are optional [`Matcher`] arguments that get bound to the expression and transform the generated [`Matcher`] into a [compound matcher](gram_ref#call-atom).
 ///
 /// ```
 /// grammar! {
@@ -57,7 +57,7 @@
 /// ```
 pub use gramex_macro::grammar;
 
-/// generate an ananymous [`Matcher`] from a [grammar expression](gram_ref).
+/// generate an anonymous [`Matcher`] from a [grammar expression](gram_ref).
 ///
 /// ```gramex
 /// let body = "for" matched:type ',' ("Capture" ':' type)? expr ("=>" map:rust_expr)?
@@ -90,9 +90,9 @@ pub use gramex_macro::matcher;
 /// let body = ("for" matched:type ',')? value:rust_expr ',' expr;
 /// ```
 ///
-/// `check` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammer expression `expr`, `expr` can access local variables.
+/// `check` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammar expression `expr`, `expr` can access local variables.
 ///
-/// it return `Result<(), MatchError>` for if the expression matches the entire `value` from offset `0` till `value.len()`. it return `false` if there are excess input.
+/// it returns `Result<(), MatchError>` for whether the expression matches the entire `value` from offset `0` till `value.len()`. it returns an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
 ///  
 /// # example
 /// ```
@@ -109,9 +109,9 @@ pub use gramex_macro::check;
 /// let body = ("for" matched:type ',')? value:rust_expr ',' expr;
 /// ```
 ///
-/// `matches` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammer expression `expr`, `expr` can access local variables.
+/// `matches` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammar expression `expr`, `expr` can access local variables.
 ///
-/// it return `bool` for if the expression matches the entire `value` from offset `0` till `value.len()`. it return [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there are excess input.
+/// it returns `bool` for whether the expression matches the entire `value` from offset `0` till `value.len()`. it returns `false` if there is excess input.
 ///  
 /// # example
 /// ```
@@ -130,7 +130,7 @@ pub use gramex_macro::matches;
 ///
 /// `parse` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammer expression `expr`, `expr` can access local variables.
 ///
-/// it return `Result<Capture, MatchError>` for if the expression matches the entire `value` from offset `0` till `value.len()`. it return [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there are excess input.
+/// it returns `Result<Capture, MatchError>` for whether the expression matches the entire `value` from offset `0` till `value.len()`. it returns an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
 ///
 /// the expression is inside an implicit root [capture](gram_ref#captures) whose result is used as the return type.
 ///
@@ -151,7 +151,7 @@ pub use gramex_macro::parse;
 ///
 /// `try_match` takes a [`MatchAble`] value and optionally its type in `matched`, and the grammer expression `expr`, `expr` can access local variables.
 ///
-/// it return `Option<Capture>` for if the expression matches the entire `value` from offset `0` till `value.len()`. it return `None` if there are excess input.
+/// it returns `Option<Capture>` for whether the expression matches the entire `value` from offset `0` till `value.len()`. it returns `None` if there is excess input.
 ///
 /// the expression is inside an implicit root [capture](gram_ref#captures) whose result is used as the return type.
 ///

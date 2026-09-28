@@ -1,6 +1,6 @@
 //! [`[u8]`](prim@slice) byte slices matching implementation.
 //!
-//! when `bytes` feature is enabled, [`[u8]`](prim@slice) matching get enabled with additional extra [`Matcher`](crate::Matcher)s through this module.
+//! when `bytes` feature is enabled, [`[u8]`](prim@slice) matching gets enabled with additional [`Matcher`](crate::Matcher)s through this module.
 //!
 //! # `[u8]` [`MatchAble`] implementation
 //!
@@ -26,7 +26,7 @@
 //!
 //! in addition to `&[u8]`, [`Box<[u8]>`](Box), [`Rc<[u8]>`](alloc_crate::rc::Rc) and [`Arc<[u8]>`](alloc_crate::sync::Arc) that are common to all [`MatchAble`]s.
 //!
-//! these [`Matcher`](crate::Matcher)s matches with the `[u8]` slice they matched.
+//! these [`Matcher`](crate::Matcher)s match with the `[u8]` slice they match.
 //!
 //! ```
 //! assert_eq!(parse(&[1, 2, 3][..], &[1, 2, 3]), Ok(&[1, 2, 3][..]));
@@ -48,7 +48,7 @@
 //! ```
 //!
 //! # extra [`Matcher`](crate::Matcher)s
-//! the `bytes` module export multiple [`Matcher`](crate::Matcher)s that matches and capture bytes of common kinds and patterns: [`u32_le`], [`be`], [`a_le`]...
+//! the `bytes` module exports multiple [`Matcher`](crate::Matcher)s that match and capture bytes of common kinds and patterns: [`u32_le`], [`be`], [`a_le`]...
 //!
 //! ```
 //! assert_eq!(try_match(&[1, 2, 3, 4][..], be(0x1020304u32)), Some(&[1, 2, 3, 4][..]));
@@ -122,9 +122,9 @@ fn to_hex(slice: &[u8]) -> LeanString {
 define_ref_matcher!(Vec<u8>, for [u8]);
 define_ref_matcher!(#for(const N: usize) [u8; N], for [u8]);
 
-/// test if currest offset is `align` bytes aligned.
+/// test if current offset is `align` bytes aligned.
 ///
-/// `aligned` produce a [`Matcher`](crate::Matcher) that matches with `()` if the current offset is aligned to `align` bytes boundry, otherwise it fails.
+/// `aligned` produces a [`Matcher`](crate::Matcher) that matches with `()` if the current offset is aligned to an `align`-byte boundary, otherwise it fails.
 ///
 /// # example
 /// ```
@@ -137,7 +137,7 @@ pub fn aligned(align: usize) -> Aligned {
 	Aligned { align }
 }
 
-/// types convertable to little endian byte arrays.
+/// types convertible to little endian byte arrays.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -152,14 +152,14 @@ pub trait AsLEBytes: Sized + Clone {
 
 	/// convert a little endian byte array to this type.
 	///
-	/// `bytes` is graduated to be [`BYTES`](Self::BYTES) sized.
+	/// `bytes` is guaranteed to be [`BYTES`](Self::BYTES) sized.
 	fn from_bytes(bytes: &[u8]) -> Self;
 
 	/// convert this type to a little endian byte array.
 	fn to_bytes(&self) -> Self::Bytes;
 }
 
-/// types convertable to big endian byte array.
+/// types convertible to big endian byte arrays.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -181,7 +181,7 @@ pub trait AsBEBytes: Sized + Clone {
 
 /// matches by the little endian byte view of `value`.
 ///
-/// `le` produce a [`Matcher`](crate::Matcher) that convert `value` into little endian byte array and matches with it, capturing the matched `[u8]` slice.
+/// `le` produces a [`Matcher`](crate::Matcher) that converts `value` into a little endian byte array and matches with it, capturing the matched `[u8]` slice.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -201,7 +201,7 @@ pub fn le<T: AsLEBytes>(value: T) -> LE<T> {
 
 /// matches by the big endian byte view of `value`.
 ///
-/// `be` produce a [`Matcher`](crate::Matcher) that convert `value` into big endian byte array and matches with it, capturing the matched `[u8]` slice.
+/// `be` produces a [`Matcher`](crate::Matcher) that converts `value` into a big endian byte array and matches with it, capturing the matched `[u8]` slice.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -219,9 +219,9 @@ pub fn be<T: AsBEBytes>(value: T) -> BE<T> {
 	BE(value)
 }
 
-/// matches a little endian encoded value by a pridicate.
+/// matches a little endian encoded value by a predicate.
 ///
-/// `a_le` produce a [`Matcher`](crate::Matcher) that decode a little endian byte slice as `T` value and test it by `pred`. if `pred` return `true` it matches with the value, else it fail.
+/// `a_le` produces a [`Matcher`](crate::Matcher) that decodes a little endian byte slice as a `T` value and tests it by `pred`. If `pred` returns `true` it matches with the value, else it fails.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -240,9 +240,9 @@ pub fn a_le<T: AsLEBytes, F: Fn(T) -> bool>(pred: F) -> ALE<T, F> {
 	ALE(pred, PhantomData)
 }
 
-/// matches a big endian encoded value by a pridicate.
+/// matches a big endian encoded value by a predicate.
 ///
-/// `a_be` produce a [`Matcher`](crate::Matcher) that decode a big endian byte slice as `T` value and test it by `pred`. if `pred` return `true` it matches with the value, else it fail.
+/// `a_be` produces a [`Matcher`](crate::Matcher) that decodes a big endian byte slice as a `T` value and tests it by `pred`. If `pred` returns `true` it matches with the value, else it fails.
 ///
 /// it is implemented for:
 /// - [`u16`], [`u32`], [`u64`], [`u128`], [`usize`],
@@ -496,7 +496,7 @@ mod bits_ext {
 
 	/// matches a little endian `bytes` word by a bits [`Matcher`].
 	///
-	/// `word_le` take a [`LBits`]/[`BBits`] `matcher` and produce a [`Matcher`] that matches a little endian `bytes` bytes section, then matches its bits in little / big endian order with `matcher`, propagating its result.
+	/// `word_le` takes a [`LBits`]/[`BBits`] `matcher` and produces a [`Matcher`] that matches a little endian byte section of `bytes` length, then matches its bits in little / big endian order with `matcher`, propagating its result.
 	///
 	/// # example
 	/// ```
@@ -515,7 +515,7 @@ mod bits_ext {
 
 	/// matches a big endian `bytes` word by a bits [`Matcher`].
 	///
-	/// `word_be` take a [`LBits`]/[`BBits`] `matcher` and produce a [`Matcher`] that matches a big endian `bytes` bytes section, then matches its bits in little / big endian order with `matcher`, propagating its result.
+	/// `word_be` takes a [`LBits`]/[`BBits`] `matcher` and produces a [`Matcher`] that matches a big endian byte section of `bytes` length, then matches its bits in little / big endian order with `matcher`, propagating its result.
 	///
 	/// # example
 	/// ```

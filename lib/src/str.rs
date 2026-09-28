@@ -1,10 +1,10 @@
 //! [`str`] matching implementation
 //!
-//! when `str` feature is enabled, [`str`] matching get enabled with additional extra [`Matcher`]s through this module.
+//! when `str` feature is enabled, [`str`] matching gets enabled with additional extra [`Matcher`]s through this module.
 //!
 //! # `str` [`MatchAble`] implementation
 //!
-//! [`MatchAble`] is implemented for [`str`] where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`] and offsets are byte indexes of [`str`].
+//! [`MatchAble`] is implemented for [`str`] where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`] and offsets are byte indices of [`str`].
 //!
 //! ```
 //! assert_eq!(MatchAble::len("abc"), 3);
@@ -26,7 +26,7 @@
 //!
 //! in addition to `&str`, [`Box<str>`], [`Rc<str>`](alloc_crate::rc::Rc) and [`Arc<str>`](alloc_crate::sync::Arc) that are common to all [`MatchAble`]s.
 //!
-//! these [`Matcher`]s matches with the [`str`] slice they matched.
+//! these [`Matcher`]s match with the [`str`] slice they match.
 //!
 //! ```
 //! assert_eq!(parse("abc", "abc"), Ok("abc"));
@@ -41,7 +41,7 @@
 //! ```
 //! # pattern [`Matcher`]s
 //!
-//! the `str` module export multiple [`Matcher`]s that matches characters of common kinds and patterns, like [`alpha`], [`ws`], [`lower`], [`hex`]...
+//! the `str` module exports multiple [`Matcher`]s that match characters of common kinds and patterns, like [`alpha`], [`ws`], [`lower`], [`hex`]...
 //!
 //! ```
 //! assert!(matches("a", alpha));
@@ -143,8 +143,8 @@ macro_rules! define_char_patterns {
 		$(
 			#[doc = concat!(
 				"matches ", $kind, ".\n\n",
-				"`", stringify!($name), "` is a [`Matcher`] that matches a character satisfing ",
-				$satisfy, ", and capture it as `str` slice.\n\n",
+				"`", stringify!($name), "` is a [`Matcher`] that matches a character satisfying ",
+				$satisfy, ", and captures it as a `str` slice.\n\n",
 				$("this is unicode aware, for ascii only version, see [`", $ascii_equiv, "`].\n\n",)?
 				$("this is ascii only, for unicode aware version, see [`", $unicode_equiv, "`].\n\n",)?
 				"# example \n\n```\n",
@@ -286,7 +286,7 @@ define_char_patterns![
 
 /// matches a digit character of given `radix`.
 ///
-/// `digit` create a [`Matcher`] that matches a character that is a digit of `radix` between `2` and `36` inclusive.
+/// `digit` creates a [`Matcher`] that matches a character that is a digit of `radix` between `2` and `36` inclusive.
 ///
 /// it is based on [`char::is_digit`], and capture the character `str` slice.
 ///

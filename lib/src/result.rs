@@ -10,14 +10,14 @@ use lean_string::LeanString;
 
 /// what was expected to be matched.
 ///
-/// `Expected` is a data structure that express what the matching logic was expected to match but failed at a given point.
+/// `Expected` is a data structure that expresses what the matching logic was expected to match but failed at a given point.
 ///
 /// `Expected` is an optional part inside [`MatchError`] that is advised for every general matcher to provide for better error messages.
 ///
 /// `Expected` uses [`LeanString`] to store small strings inline.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Expected {
-	/// undifined `Expected` value.
+	/// undefined `Expected` value.
 	///
 	/// used when the `Expected` is difficult to compute or not important.
 	///
@@ -30,9 +30,9 @@ pub enum Expected {
 	#[default]
 	None,
 
-	/// expected whatever non empty thing.
+	/// expected whatever non-empty thing.
 	///
-	/// usefull for [`skip_n`](crate::MatchAble::skip_n) and anything like it.
+	/// useful for [`skip_n`](crate::MatchAble::skip_n) and anything like it.
 	///
 	/// # example
 	/// ```
@@ -43,7 +43,7 @@ pub enum Expected {
 
 	/// expected a specific thing.
 	///
-	/// the most common `Expected` kind, being olny any string.
+	/// the most common `Expected` kind, being only any string.
 	///
 	/// # example
 	/// ```
@@ -147,11 +147,11 @@ impl Display for Expected {
 	}
 }
 
-/// the what part of [`MatchError`]
+/// the what of [`MatchError`]
 ///
-/// the `MatchErrorKind` encode the kind of [`MatchError`], wheather it is [mismatch](Self::MisMatch), [incomplete](Self::InComplete), and whatever.
+/// the `MatchErrorKind` encodes the kind of [`MatchError`], whether it is [mismatch](Self::MisMatch), [incomplete](Self::InComplete), and whatever.
 ///
-/// `MatchErrorKind` are generally not manually constructed, instead a contructor function is provided for every kind in [`MatchError`].
+/// `MatchErrorKind` is generally not manually constructed; instead, a constructor function is provided for every kind in [`MatchError`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MatchErrorKind {
 	/// a mismatch between what was [`Expected`] and what was found.
@@ -166,7 +166,7 @@ pub enum MatchErrorKind {
 	/// ```
 	MisMatch(Expected),
 
-	/// an incomplete input while [`Expected`] someething.
+	/// an incomplete input while [`Expected`] something.
 	///
 	/// # example
 	/// ```
@@ -205,20 +205,20 @@ pub enum MatchErrorKind {
 ///
 /// the `MatchError` is a general and good enough error type used universally by every [`Matcher`](crate::Matcher) and the general utilities powered by it.
 ///
-/// it is composed of a [`MatchErrorKind`] representing its kind, and `off`set representing where it occured, and optionally an [`Expected`] representing what was expected to be.
+/// it is composed of a [`MatchErrorKind`] representing its kind, and `off`set representing where it occurred, and optionally an [`Expected`] representing what was expected to be.
 ///
-/// `MatchError` is generally constructed through the varoius constructors provided by it.
+/// `MatchError` is generally constructed through the various constructors provided by it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MatchError {
 	/// the kind of the error
 	pub kind: MatchErrorKind,
-	/// the offset of where the error occured
+	/// the offset of where the error occurred
 	pub off: usize,
 }
 impl MatchError {
 	/// create a `MatchError` of kind [`MisMatch`](MatchErrorKind::MisMatch).
 	///
-	/// it takes what is [`Expected`] and the offset where the error occured.
+	/// it takes what is [`Expected`] and the offset where the error occurred.
 	///
 	/// # example
 	/// ```
@@ -234,7 +234,7 @@ impl MatchError {
 
 	/// create a `MatchError` of kind [`InComplete`](MatchErrorKind::InComplete).
 	///
-	/// it takes what is [`Expected`] and the offset where the error occured.
+	/// it takes what is [`Expected`] and the offset where the error occurred.
 	///
 	/// # example
 	/// ```
@@ -252,7 +252,7 @@ impl MatchError {
 	///
 	/// the result error kind is either [`MisMatch`](MatchErrorKind::MisMatch) or [`InComplete`](MatchErrorKind::InComplete) depending on `is_incomplete`.
 	///
-	/// it take an offset where the error occured.
+	/// it takes an offset where the error occurred.
 	///
 	/// # example
 	/// ```
@@ -277,7 +277,7 @@ impl MatchError {
 
 	/// create a `MatchError` of kind [`Excess`](MatchErrorKind::Excess).
 	///
-	/// it takes the offset where the error occured.
+	/// it takes the offset where the error occurred.
 	///
 	/// # example
 	/// ```
@@ -290,7 +290,7 @@ impl MatchError {
 
 	/// create a `MatchError` of kind [`Other`](MatchErrorKind::Other).
 	///
-	/// it takes a message and the offset where the error occured.
+	/// it takes a message and the offset where the error occurred.
 	///
 	/// # example
 	/// ```
