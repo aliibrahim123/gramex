@@ -504,6 +504,23 @@ pub trait Cursor<'src> {
 		Ok(self.input().get_token(start).unwrap())
 	}
 
+	/// try capture a token
+	///
+	/// # example
+	/// ```
+	/// let mut cur = SimpleCursor::new("abc");
+	/// assert_eq!(cur.try_eat_token(), Some("a"));
+	/// assert_eq!(cur.try_eat_token(), Some("b"));
+	/// assert_eq!(cur.try_eat_token(), Some("c"));
+	/// assert!(cur.try_eat_token().is_none());
+	/// ```
+	#[inline]
+	fn try_eat_token(&mut self) -> Option<<Self::MatchAble as MatchAble>::Token<'src>> {
+		let start = self.off();
+		self.input().skip_n::<Test>(self.off_mut(), 1).ok()?;
+		self.input().get_token(start)
+	}
+
 	/// advance the `Cursor` by one token.
 	///
 	/// `skip` uses [`MatchAble::skip_n`] under the hood, and acts as a noop at end of input.
