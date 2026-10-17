@@ -100,7 +100,7 @@ use core::{
 
 use crate::{
 	MatchAble, Matcher, Mode,
-	core::Test,
+	core::{Check, Test},
 	result::{Expected, MatchError, MatchResult},
 };
 
@@ -483,6 +483,25 @@ pub trait Cursor<'src> {
 	#[inline]
 	fn test(&self, matcher: impl Matcher<Self::MatchAble>) -> bool {
 		matcher.test(self.input(), &mut self.off())
+	}
+
+	/// capture a token.
+	///
+	/// # example
+	/// ```
+	/// let mut cur = SimpleCursor::new("abc");
+	/// assert_eq!(cur.eat_token(), Ok("a"));
+	/// assert_eq!(cur.eat_token(), Ok("b"));
+	/// assert_eq!(cur.eat_token(), Ok("c"));
+	/// assert!(cur.eat_token().is_err());
+	/// ```
+	#[inline]
+	fn eat_token(
+		&mut self,
+	) -> Result<<Self::MatchAble as MatchAble>::Token<'src>, Self::Error> {
+		let start = self.off();
+		self.input().skip_n::<Check>(self.off_mut(), 1).map_err(|e| self.map_error(e))?;
+		Ok(self.input().get_token(start).unwrap())
 	}
 
 	/// advance the `Cursor` by one token.
