@@ -4,20 +4,20 @@ use alloc_crate::{rc::Rc, sync::Arc};
 
 use crate::result::{Expected, MatchError, MatchResult};
 
-/// a type supporting matching.
+/// a type that supports matching.
 ///
-/// the `MatchAble` trait enables a type to be matchable by gramex, by implementing a set of items and conventions.
+/// the `MatchAble` trait enables a type to be matched by gramex through a set of items and conventions.
 ///
 /// # requirements
 /// to be `MatchAble`, the implementing type must be:
 /// - viewable as a token list
 /// - indexable by `usize`
-/// - supporting random access
-/// - supporting slicing.
+/// - randomly accessible
+/// - sliceable.
 ///
-/// these requirements are essential for ensuring flexible matching and zero-copy parsing are universal properties of matching.
+/// these requirements are essential for making flexible matching and zero-copy parsing universal properties of matching.
 ///
-/// `MatchAble`s can have variable length tokens, not necessarily unit-sized.
+/// `MatchAble`s can have variable-length tokens; tokens need not be unit-sized.
 ///
 /// # implementation example
 /// ```
@@ -47,42 +47,42 @@ use crate::result::{Expected, MatchError, MatchResult};
 /// }
 /// ```
 ///
-/// for slice-based types, `MatchAble` can be automatically generated with extra [`Matcher`]s by [`derive_slice_matchable!`](crate::derive::derive_slice_matchable).
+/// for slice-based types, `MatchAble` can be generated automatically, along with extra [`Matcher`]s, by [`derive_slice_matchable!`](crate::derive::derive_slice_matchable).
 /// ```
 /// gramex::derive::derive_slice_matchable!(Tokens(&[Token]), matchers: true, expected: Debug);
 /// ```
 ///
 /// # built-in `MatchAble` types
-/// gramex implements `MatchAble` for multiple types based on feature flags:
-/// - [`str`] through [`str` module](crate::str) and `str` feature flag.
-/// - `[u8]` through [`bytes` module](crate::bytes) and `bytes` feature flag.
-/// - bitfields through [`bits` module](crate::bits) and `bits` feature flag.
+/// depending on feature flags, gramex implements `MatchAble` for multiple types:
+/// - [`str`] through the [`str` module](crate::str) and the `str` feature flag.
+/// - `[u8]` through the [`bytes` module](crate::bytes) and the `bytes` feature flag.
+/// - bitfields through the [`bits` module](crate::bits) and the `bits` feature flag.
 pub trait MatchAble {
-	/// a single token of the `MatchAble` created by [`get_token`](Self::get_token).
+	/// a single token of the `MatchAble`, created by [`get_token`](Self::get_token).
 	///
-	/// `Token` can be [`Copy`], reference or anything.
+	/// `Token` can be [`Copy`], a reference, or anything else.
 	///
-	/// it must be linked to the lifetime of the `MatchAble` through `'src` lifetime.
+	/// it must be linked to the lifetime of the `MatchAble` through the `'src` lifetime.
 	type Token<'src>
 	where
 		Self: 'src;
 
-	/// a slice of the `MatchAble` tokens, created by [`slice`](Self::slice).
+	/// a slice of the `MatchAble`'s tokens, created by [`slice`](Self::slice).
 	///
-	/// `Slice` can be of any type, but usually primitive [slices](primitive@slice).
+	/// `Slice` can be of any type, but is usually a primitive [slice](primitive@slice).
 	///
-	/// it must be linked to the lifetime of the `MatchAble` through `'src` lifetime.
+	/// it must be linked to the lifetime of the `MatchAble` through the `'src` lifetime.
 	///
-	/// implementing `MatchAble` for it provides the `MatchAble` subslice matching ability, and [`and expression`](crate::gram_ref#and-expression) support.
+	/// implementing `MatchAble` for it enables subslice matching and [`and expression`](crate::gram_ref#and-expression) support.
 	type Slice<'src>
 	where
 		Self: 'src;
 
-	/// the length of the `MatchAble`
+	/// the length of the `MatchAble`.
 	///
-	/// the length must be stable during matching and signal the end of input when the offset hits it.
+	/// the length must remain stable during matching, and it signals the end of the input when the offset reaches it.
 	///
-	/// but it doesn't need to equal the token count.
+	/// it does not need to equal the token count.
 	///
 	/// # example
 	/// ```
@@ -93,7 +93,7 @@ pub trait MatchAble {
 
 	/// slice the `MatchAble` by a [`Range`].
 	///
-	/// `slice` tries to slice the `MatchAble` into a [`Slice`](Self::Slice), returning `None` if out of bounds or unaligned to token boundaries.
+	/// `slice` tries to slice the `MatchAble` into a [`Slice`](Self::Slice), returning `None` if the range is out of bounds or not aligned to token boundaries.
 	///
 	/// # example
 	/// ```
@@ -105,7 +105,7 @@ pub trait MatchAble {
 
 	/// get the [`Token`](Self::Token) at the given offset.
 	///
-	/// `get_token` returns `None` if out of bounds or unaligned to token boundaries.
+	/// `get_token` returns `None` if the offset is out of bounds or not aligned to a token boundary.
 	///
 	/// # example
 	/// ```
@@ -119,7 +119,7 @@ pub trait MatchAble {
 	///
 	/// `skip_n` is generic over [`Mode`], and returns a [`MatchError`] if it cannot skip all `n` tokens.
 	///
-	/// the default implementation treats the `MatchAble` as having unit-sized tokens, and returns [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] if there are not enough tokens.
+	/// the default implementation treats the `MatchAble` as having unit-sized tokens, and returns an [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] if there are not enough tokens.
 	///
 	/// # example
 	/// ```
@@ -139,31 +139,31 @@ pub trait MatchAble {
 	}
 }
 
-/// matching mode type state.
+/// the matching-mode type state.
 ///
-/// the `Mode` trait utilizes GATs (generic associated types) and the type state pattern to make the matching logic generic over matching features.
+/// the `Mode` trait uses GATs (generic associated types) and the type state pattern to make the matching logic generic over matching features.
 ///
-/// it is generally used in [`Matcher`]s to have one super implementation that gets monomorphized with only the required features and no extra bloat, supporting everything from quick tester to advanced parsers from the same primitive units.
+/// it is generally used in [`Matcher`]s to provide a single generic implementation that is monomorphized with only the required features and no extra bloat, supporting everything from quick testers to advanced parsers using the same primitive units.
 ///
 /// # how it works
-/// `Mode` allows the generalization of features through an orthogonal set of associated items for each feature that acts as selectors and guards.
+/// `Mode` generalizes features through an orthogonal set of associated items for each feature, which act as selectors and guards.
 ///
-/// there are 2 features [capture](#capture-feature) and [error](#error-feature).
+/// there are two features: [capture](#capture-feature) and [error](#error-feature).
 ///
 /// each feature has:
 /// - its own type `T` and [`MatchResult`] variant.
 /// - `type Result`: the result type of the feature, `T` when enabled and `()` when disabled.
-/// - `const DO_FEATURE: bool`: reflect the feature state.
+/// - `const DO_FEATURE: bool`: reflects the feature state.
 /// - `type With/WithoutFeature`: the `Mode` with the feature enabled/disabled.
-/// - `fn result(res: FnOnce() -> T) -> MatchResult`: construct a [`MatchResult`] from the result of `res`, discarding `res` if the feature is disabled.
-/// - `fn wrap_result(res: T) -> Result`: wrap `T` in `Result`, discarding `T` if the feature is disabled.
-/// - `fn unwrap_result(res: Result) -> T`: unwrap `T` from `Result` only if the feature is enabled.
+/// - `fn result(res: FnOnce() -> T) -> MatchResult`: constructs a [`MatchResult`] from the result of `res`, discarding `res` if the feature is disabled.
+/// - `fn wrap_result(res: T) -> Result`: wraps `T` in `Result`, discarding `T` if the feature is disabled.
+/// - `fn unwrap_result(res: Result) -> T`: unwraps `T` from `Result` (only if the feature is enabled).
 ///
-/// # `capture` feature.
+/// # `capture` feature
 /// the `capture` feature controls the production of [`Capture`s](Matcher::Capture) during matching.
 ///
 /// its items are:
-/// - any `T` as own type, and [`Ok`] [`MatchResult`] variant.
+/// - any `T` as its own type, and the [`Ok`] [`MatchResult`] variant.
 /// - [`Success<T>`](Self::Success) as `type Result`.
 /// - [`DO_CAPTURE`](Self::DO_CAPTURE) as `const DO_FEATURE`.
 /// - [`WithCapture`](Self::WithCapture)/[`WithoutCapture`](Self::WithoutCapture) as `type With/WithoutFeature`.
@@ -174,7 +174,7 @@ pub trait MatchAble {
 /// ### example
 /// ```
 /// fn do_capture<M: Mode>(tokens: &Tokens, matcher: Token) -> Option<M::Success<Token>> {
-///     let cap = None;
+///     let mut cap = None;
 ///     let res = matcher.do_match::<M>(tokens, &mut 0).ok()?;
 ///     if M::DO_CAPTURE {
 ///         cap = Some(M::unwrap_success(res));
@@ -189,10 +189,10 @@ pub trait MatchAble {
 /// ```
 ///
 /// # `error` feature
-/// the `error` feature controls the production of [`MatchError`] during matching.
+/// the `error` feature controls the production of [`MatchError`]s during matching.
 ///
 /// its items are:
-/// - [`MatchError`] as `T` and [`Err`] [`MatchResult`] variant.
+/// - [`MatchError`] as `T` and the [`Err`] [`MatchResult`] variant.
 /// - [`Error`](Self::Error) as `type Result`.
 /// - [`DO_ERROR`](Self::DO_ERROR) as `const DO_FEATURE`.
 /// - [`WithError`](Self::WithError)/[`WithoutError`](Self::WithoutError) as `type With/WithoutFeature`.
@@ -219,23 +219,23 @@ pub trait MatchAble {
 /// ```
 ///
 /// # concrete `Mode`s
-/// gramex defines every possible permutation of `Mode` as concrete types, they are:
+/// gramex defines every possible `Mode` permutation as a concrete type:
 ///
-/// | `Mode`      | `capture` | `error` | simplified result        | use cases         |
-/// | ----------- | --------- | ------- | ------------------------ | ----------------- |
-/// | [`Test`]    | `false`   | `false` | `bool`                   | peek-based tests  |
-/// | [`Capture`] | `true`    | `false` | `Option<T>`              | quick extractions |
-/// | [`Check`]   | `false`   | `true`  | `Result<(), MatchError>` | error emit mode   |
-/// | [`Parse`]   | `true`    | `true`  | `Result<T, MatchError>`  | advanced parsing  |
+/// | `Mode`      | `capture` | `error` | simplified result        | use cases           |
+/// | ----------- | --------- | ------- | ------------------------ | ------------------- |
+/// | [`Test`]    | `false`   | `false` | `bool`                   | peek-based tests    |
+/// | [`Capture`] | `true`    | `false` | `Option<T>`              | quick extractions   |
+/// | [`Check`]   | `false`   | `true`  | `Result<(), MatchError>` | error reporting     |
+/// | [`Parse`]   | `true`    | `true`  | `Result<T, MatchError>`  | advanced parsing    |
 pub trait Mode {
 	/// the result type of the [`capture`](#capture-feature) feature.
 	///
-	/// it is `T` if `capture` is enabled, otherwise it is `()`.
+	/// it is `T` if `capture` is enabled; otherwise it is `()`.
 	type Success<T>;
 
 	/// the result type of the [`error`](#error-feature) feature.
 	///
-	/// it is [`MatchError`] if `error` is enabled, otherwise it is `()`.
+	/// it is [`MatchError`] if `error` is enabled; otherwise it is `()`.
 	type Error;
 
 	/// the state of the [`capture`](#capture-feature) feature.
@@ -294,9 +294,9 @@ pub trait Mode {
 	/// ```
 	type WithoutError: Mode<Error = ()>;
 
-	/// transform the result of `cap` into [`Ok`] based on [`capture`](#capture-feature) feature.
+	/// transform the result of `cap` into [`Ok`], based on the [`capture`](#capture-feature) feature.
 	///
-	/// it returns `Ok(cap())` if `capture` is enabled, otherwise it returns `Ok(())` discarding `cap`.
+	/// it returns `Ok(cap())` if `capture` is enabled; otherwise it returns `Ok(())`, discarding `cap`.
 	///
 	/// # example
 	/// ```
@@ -305,9 +305,9 @@ pub trait Mode {
 	/// ```
 	fn ok<T>(cap: impl FnOnce() -> T) -> MatchResult<T, Self>;
 
-	/// transform the result of `err` into [`Err`] based on [`error`](#error-feature) feature.
+	/// transform the result of `err` into [`Err`], based on the [`error`](#error-feature) feature.
 	///
-	/// it returns `Err(err())` if `error` is enabled, otherwise it returns `Err(())` discarding `err`.
+	/// it returns `Err(err())` if `error` is enabled; otherwise it returns `Err(())`, discarding `err`.
 	///
 	/// # example
 	/// ```
@@ -317,9 +317,9 @@ pub trait Mode {
 	/// ```
 	fn err<T>(err: impl FnOnce() -> MatchError) -> Result<T, Self::Error>;
 
-	/// transform `val` into [`Success<T>`](Self::Success) based on [`capture`](#capture-feature) feature.
+	/// transform `val` into [`Success<T>`](Self::Success), based on the [`capture`](#capture-feature) feature.
 	///
-	/// it returns `val` if `capture` is enabled, otherwise it returns `()` discarding `val`.
+	/// it returns `val` if `capture` is enabled; otherwise it returns `()`, discarding `val`.
 	///
 	/// # example
 	/// ```
@@ -328,9 +328,9 @@ pub trait Mode {
 	/// ```
 	fn wrap_success<T>(val: T) -> Self::Success<T>;
 
-	/// transform `err` into [`Error`](Self::Error) based on [`error`](#error-feature) feature.
+	/// transform `err` into [`Error`](Self::Error), based on the [`error`](#error-feature) feature.
 	///
-	/// it returns `err` if `error` is enabled, otherwise it returns `()` discarding `err`.
+	/// it returns `err` if `error` is enabled; otherwise it returns `()`, discarding `err`.
 	///
 	/// # example
 	/// ```
@@ -340,15 +340,15 @@ pub trait Mode {
 	/// ```
 	fn wrap_error(err: MatchError) -> Self::Error;
 
-	/// transform [`Success<T>`](Self::Success) into `T` based on [`capture`](#capture-feature) feature.
+	/// transform [`Success<T>`](Self::Success) into `T`, based on the [`capture`](#capture-feature) feature.
 	///
-	/// it returns `val` if `capture` is enabled, otherwise it panics.
+	/// it returns `val` if `capture` is enabled; otherwise it panics.
 	///
 	/// # example
 	/// ```
 	/// assert_eq!(Capture::unwrap_success(Capture::wrap_success(1)), 1);
 	/// // this panics
-	/// Check::unwrap_success(1);
+	/// Check::unwrap_success(());
 	/// ```
 	#[inline]
 	fn unwrap_success<T>(val: Self::Success<T>) -> T {
@@ -356,16 +356,16 @@ pub trait Mode {
 		panic!("unwrap_success called on no-capture mode")
 	}
 
-	/// transform [`Error`](Self::Error) into [`MatchError`] based on [`error`](#error-feature) feature.
+	/// transform [`Error`](Self::Error) into [`MatchError`], based on the [`error`](#error-feature) feature.
 	///
-	/// it returns `val` if `error` is enabled, otherwise it panics.
+	/// it returns `val` if `error` is enabled; otherwise it panics.
 	///
 	/// # example
 	/// ```
 	/// let err = MatchError::mismatch(Expected::SomeThing, 0);
 	/// assert_eq!(Check::unwrap_error(Check::wrap_error(err.clone())), err);
 	/// // this panics
-	/// Test::unwrap_error(err);
+	/// Test::unwrap_error(());
 	/// ```
 	#[inline]
 	fn unwrap_error(val: Self::Error) -> MatchError {
@@ -373,14 +373,14 @@ pub trait Mode {
 		panic!("unwrap_error called on no-error mode")
 	}
 
-	/// map [`Success<T>`](Self::Success) into [`Success<U>`](Self::Success) by applying `fun` on its wrapped value.
+	/// map [`Success<T>`](Self::Success) into [`Success<U>`](Self::Success) by applying `fun` to its wrapped value.
 	///
-	/// it returns `fun(val)` if [`capture`](#capture-feature) is enabled, otherwise it returns `()`.
+	/// it returns `fun(val)` if [`capture`](#capture-feature) is enabled; otherwise it returns `()`.
 	///
 	/// # example
 	/// ```
 	/// assert_eq!(Capture::map(Capture::wrap_success(1), |x| x + 1), 2);
-	/// assert_eq!(Check::map(Capture::wrap_success(1), |x| x + 1), ());
+	/// assert_eq!(Check::map(Check::wrap_success(1), |x| x + 1), ());
 	/// ```
 	fn map<T, U>(val: Self::Success<T>, fun: impl FnOnce(T) -> U) -> Self::Success<U>;
 }
@@ -454,11 +454,11 @@ macro_rules! decl_mode {
 		};
 	}
 decl_mode!(
-	/// concrete [`Mode`] with no feature enabled.
+	/// the concrete [`Mode`] with no feature enabled.
 	///
-	/// in `Test`: [`capture`](Mode#capture-feature) is `false`, [`error`](Mode#error-feature) is `false`, its simplified result is `bool`.
+	/// in `Test`: [`capture`](Mode#capture-feature) is `false`, [`error`](Mode#error-feature) is `false`, and its simplified result is `bool`.
 	///
-	/// it monomorphizes to the lightest matching logic, great for peek-based tests and "did match" tests.
+	/// it monomorphizes to the lightest matching logic, which is great for peek-based tests and simple "did it match?" checks.
 	///
 	/// # example
 	/// ```
@@ -478,11 +478,11 @@ decl_mode!(
 	}
 );
 decl_mode!(
-	/// concrete [`Mode`] with [`error`](Mode#error-feature) feature enabled.
+	/// the concrete [`Mode`] with the [`error`](Mode#error-feature) feature enabled.
 	///
 	/// in `Check`: [`capture`](Mode#capture-feature) is `false`, [`error`](Mode#error-feature) is `true`, and its simplified result is `Result<(), MatchError>`.
 	///
-	/// it is great for `did match` checks with detailed [`MatchError`]s.
+	/// it is great for "did it match?" checks that need detailed [`MatchError`]s.
 	///
 	/// # example
 	/// ```
@@ -499,11 +499,11 @@ decl_mode!(
 	}
 );
 decl_mode!(
-	/// concrete [`Mode`] with [`capture`](Mode#capture-feature) feature enabled.
+	/// the concrete [`Mode`] with the [`capture`](Mode#capture-feature) feature enabled.
 	///
 	/// in `Capture`: [`capture`](Mode#capture-feature) is `true`, [`error`](Mode#error-feature) is `false`, and its simplified result is `Option<T>`.
 	///
-	/// it is great for grammar based extractions and data transformation that doesn't need detailed [`MatchError`]s.
+	/// it is great for grammar-based extraction and data transformation that do not need detailed [`MatchError`]s.
 	///
 	/// # example
 	/// ```
@@ -522,11 +522,11 @@ decl_mode!(
 	}
 );
 decl_mode!(
-	/// concrete [`Mode`] with all features enabled.
+	/// the concrete [`Mode`] with all features enabled.
 	///
 	/// in `Parse`: [`capture`](Mode#capture-feature) is `true`, [`error`](Mode#error-feature) is `true`, and its simplified result is `Result<T, MatchError>`.
 	///
-	/// it is great for advanced parsers that need all features of [`Matcher`]s, both the expressive captures and detailed [`MatchError`]s.
+	/// it is great for advanced parsers that need all the features of [`Matcher`]s: both expressive captures and detailed [`MatchError`]s.
 	///
 	/// # example
 	/// ```
@@ -541,7 +541,7 @@ decl_mode!(
 	/// );
 	/// assert_eq!(parse("abc = 123", matcher), Ok(("abc", 123)));
 	/// assert_eq!(
-	///     parse("abc = ", matcher)
+	///     parse("abc = ", matcher),
 	///     Err(MatchError::incomplete(Expected::A("a decimal digit".into()), 6))
 	/// );
 	/// ```
@@ -556,22 +556,22 @@ decl_mode!(
 ///
 /// the `Matcher` trait enables a type to behave like a pattern for a specific [`MatchAble`].
 ///
-/// `Matcher`s don't just return bool as the match result, they can produce a [`Capture`](Self::Capture) and produce detailed [`MatchError`], all controlled through [`Mode`].
+/// `Matcher`s do not merely return a `bool`; they can produce a [`Capture`](Self::Capture) and a detailed [`MatchError`], all controlled through [`Mode`].
 ///
 /// # implementation guide
 ///
-/// `Matcher`s are advised to be universal, pure, primitive, and efficient, as `Matcher` is a universal trait used inside the quickest tester and the advanced parsers.
+/// `Matcher`s should be universal, pure, primitive and efficient, because `Matcher` is a universal trait used everywhere, from the quickest testers to the most advanced parsers.
 ///
-/// the matching logic is hosted inside [`do_match`](Self::do_match), it is generic over [`Mode`], takes the [`MatchAble`] and an offset, and returns a [`MatchResult`].
+/// the matching logic lives in [`do_match`](Self::do_match), which is generic over [`Mode`], takes the [`MatchAble`] and an offset, and returns a [`MatchResult`].
 ///
-/// the offset is token aligned, can be moved forward if needed, must remain token aligned on success, but can be anything on failure.
+/// the offset is token-aligned; it can be moved forward if needed and must remain token-aligned on success, but may be anything on failure.
 ///
-/// as a primitive unit, the `do_match` should contain primitive matching logic and offset handling, and be generic over [`Mode`] features through its selectors and guards.
+/// as a primitive unit, `do_match` should contain primitive matching logic and offset handling, and be generic over [`Mode`] features through its selectors and guards.
 ///
 /// ## example
 /// ```
 /// impl Matcher<Tokens> for Token {
-///     type Capture<'src> = Token where T: 'src;
+///     type Capture<'src> = Token where Tokens: 'src;
 ///     fn do_match<'src, M: Mode>(
 ///         &self, matched: &'src Tokens, off: &mut usize,
 ///     ) -> MatchResult<Self::Capture<'src>, M> {
@@ -592,10 +592,10 @@ decl_mode!(
 /// ```
 ///
 /// # built-in universal `Matcher`s
-/// some common types implement `Matcher` for any [`MatchAble`] type, supporting `T: Matcher`.
-/// - `()`: acts as noop and always matches with `()`.
+/// some common types implement `Matcher` for every [`MatchAble`] type, wrapping a `T: Matcher`.
+/// - `()`: acts as a no-op and always matches with `()`.
 /// - `&T`, [`Box<T>`], [`Rc<T>`], [`Arc<T>`]: redirect matching to `T`.
-/// - `Option<T>`: if it is `Some(T)`, it matches by `T` with `Some(T::Capture)`, otherwise it acts as a noop and always matches with `None`.
+/// - `Option<T>`: if it is `Some(T)`, it matches with `T` and captures `Some(T::Capture)`; otherwise it acts as a no-op and always matches with `None`.
 ///
 /// ### example
 /// ```
@@ -606,7 +606,7 @@ decl_mode!(
 /// assert_eq!(off, 0);
 ///
 /// assert_eq!((&&Token::Nb(1)).parse(&tokens, &mut off), Ok(Token::Nb(1)));
-/// assert_eq!(Box::new(Token::Add).parse(&tokens, &mut off), Ok(Token::Nb(1)));
+/// assert_eq!(Box::new(Token::Add).parse(&tokens, &mut off), Ok(Token::Add));
 ///
 /// assert_eq!(None::<Token>.parse(&tokens, &mut off), Ok(None));
 /// assert_eq!(off, 2);
@@ -615,9 +615,9 @@ decl_mode!(
 pub trait Matcher<T: MatchAble + ?Sized> {
 	/// the match product of the `Matcher`.
 	///
-	/// it can be any type, but usually [`MatchAble::Slice`].
+	/// it can be any type, but is usually a [`MatchAble::Slice`].
 	///
-	/// it must be linked to the lifetime of the matchable through `'src` lifetime.
+	/// it must be linked to the lifetime of the matched value through the `'src` lifetime.
 	type Capture<'src>
 	where
 		T: 'src;
@@ -626,7 +626,7 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 	///
 	/// see the [implementation guide](#implementation-guide) for more info.
 	///
-	/// this is a low level function, for general use check the high level items.
+	/// this is a low-level function; for general use, see the high-level items below.
 	///
 	/// # example
 	/// ```
@@ -648,9 +648,9 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		&self, matched: &'src T, off: &mut usize,
 	) -> MatchResult<Self::Capture<'src>, M>;
 
-	/// [`do_match`](Self::do_match) shorthand for [`Test`] [`Mode`].
+	/// a [`do_match`](Self::do_match) shorthand for the [`Test`] [`Mode`].
 	///
-	/// the return type is `bool` where `Ok(())` is `true` and `Err(())` is `false`.
+	/// the return type is `bool`, where `Ok(())` is `true` and `Err(())` is `false`.
 	///
 	/// # example
 	/// ```
@@ -666,7 +666,7 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		self.do_match::<Test>(matched, off).is_ok()
 	}
 
-	/// [`do_match`](Self::do_match) shorthand for [`Check`] [`Mode`].
+	/// a [`do_match`](Self::do_match) shorthand for the [`Check`] [`Mode`].
 	///
 	/// # example
 	/// ```
@@ -686,9 +686,9 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		self.do_match::<Check>(matched, off)
 	}
 
-	/// [`do_match`](Self::do_match) shorthand for [`Capture`] [`Mode`].
+	/// a [`do_match`](Self::do_match) shorthand for the [`Capture`] [`Mode`].
 	///
-	/// the return type is `Option<Capture>` where `Ok(cap)` is `Some(cap)` and `Err(())` is `None`.
+	/// the return type is `Option<Capture>`, where `Ok(cap)` is `Some(cap)` and `Err(())` is `None`.
 	///
 	/// # example
 	/// ```
@@ -707,7 +707,7 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		self.do_match::<Capture>(matched, off).ok()
 	}
 
-	/// [`do_match`](Self::do_match) shorthand for [`Parse`] [`Mode`].
+	/// a [`do_match`](Self::do_match) shorthand for the [`Parse`] [`Mode`].
 	///
 	/// # example
 	/// ```
@@ -729,7 +729,7 @@ pub trait Matcher<T: MatchAble + ?Sized> {
 		self.do_match::<Parse>(matched, off)
 	}
 
-	/// return what the `Matcher` expects to match as beginning.
+	/// return what the `Matcher` expects to match at the beginning.
 	///
 	/// the default implementation returns [`Expected::None`].
 	///
@@ -802,7 +802,7 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Option<U> {
 	}
 }
 
-/// fully match `value` by `matcher`.
+/// fully match `value` with `matcher`.
 fn match_no_excess<T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
 	value: &T, matcher: U,
 ) -> MatchResult<U::Capture<'_>, M> {
@@ -815,9 +815,9 @@ fn match_no_excess<T: MatchAble + ?Sized, U: Matcher<T>, M: Mode>(
 	}
 }
 
-/// fully match `value` by `matcher`, [`Test`] [`Mode`].
+/// fully match `value` with `matcher`, in [`Test`] [`Mode`].
 ///
-/// the matcher must match the whole value from offset `0` till `value.len()`, returning `false` if there is excess input.
+/// the matcher must match the whole value, from offset `0` to `value.len()`; it returns `false` if there is excess input.
 ///
 /// # example
 /// ```
@@ -829,9 +829,9 @@ pub fn matches<T: MatchAble + ?Sized>(value: &T, matcher: impl Matcher<T>) -> bo
 	match_no_excess::<_, _, Test>(value, matcher).is_ok()
 }
 
-/// fully match `value` by `matcher`, [`Check`] [`Mode`].
+/// fully match `value` with `matcher`, in [`Check`] [`Mode`].
 ///
-/// the matcher must match the whole value from offset `0` till `value.len()`, returning an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
+/// the matcher must match the whole value, from offset `0` to `value.len()`; it returns an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
 ///
 /// # example
 /// ```
@@ -845,9 +845,9 @@ pub fn check<T: MatchAble + ?Sized>(
 	match_no_excess::<_, _, Check>(value, matcher)
 }
 
-/// fully match `value` by `matcher`, [`Capture`] [`Mode`].
+/// fully match `value` with `matcher`, in [`Capture`] [`Mode`].
 ///
-/// the matcher must match the whole value from offset `0` till `value.len()`, returning `Err(())` if there is excess input.
+/// the matcher must match the whole value, from offset `0` to `value.len()`; it returns `None` if there is excess input.
 ///
 /// # example
 /// ```
@@ -861,9 +861,9 @@ pub fn try_match<T: MatchAble + ?Sized, U: Matcher<T>>(
 	match_no_excess::<_, _, Capture>(value, matcher).ok()
 }
 
-/// fully match `value` by `matcher`, [`Parse`] [`Mode`].
+/// fully match `value` with `matcher`, in [`Parse`] [`Mode`].
 ///
-/// the matcher must match the whole value from offset `0` till `value.len()`, returning an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
+/// the matcher must match the whole value, from offset `0` to `value.len()`; it returns an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`] if there is excess input.
 ///
 /// # example
 /// ```

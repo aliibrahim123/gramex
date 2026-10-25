@@ -1,10 +1,10 @@
 //! [`str`] matching implementation
 //!
-//! when `str` feature is enabled, [`str`] matching gets enabled with additional [`Matcher`]s through this module.
+//! when the `str` feature is enabled, this module enables [`str`] matching with additional [`Matcher`]s.
 //!
 //! # `str` [`MatchAble`] implementation
 //!
-//! [`MatchAble`] is implemented for [`str`] where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`] and offsets are byte indices of [`str`].
+//! [`MatchAble`] is implemented for [`str`], where [`Slice`](MatchAble::Slice) is [`&str`](str), [`Token`](MatchAble::Token) is [`char`], and offsets are byte indices into the [`str`].
 //!
 //! ```
 //! assert_eq!(MatchAble::len("abc"), 3);
@@ -22,11 +22,11 @@
 //!
 //! # core [`Matcher`]s
 //!
-//! the core [`Matcher`]s for [`str`] are: [`str`], [`char`], [`RangeInclusive<char>`] for range matching, [`String`], and [`Cow<str>`].
+//! the core [`Matcher`]s for [`str`] are: [`str`], [`char`], [`RangeInclusive<char>`] for range matching, [`String`] and [`Cow<str>`].
 //!
-//! in addition to `&str`, [`Box<str>`], [`Rc<str>`](alloc_crate::rc::Rc) and [`Arc<str>`](alloc_crate::sync::Arc) that are common to all [`MatchAble`]s.
+//! in addition, `&str`, [`Box<str>`], [`Rc<str>`](alloc_crate::rc::Rc) and [`Arc<str>`](alloc_crate::sync::Arc), which are common to all [`MatchAble`]s, are supported.
 //!
-//! these [`Matcher`]s match with the [`str`] slice they match.
+//! these [`Matcher`]s capture the [`str`] slice they match.
 //!
 //! ```
 //! assert_eq!(parse("abc", "abc"), Ok("abc"));
@@ -41,7 +41,7 @@
 //! ```
 //! # pattern [`Matcher`]s
 //!
-//! the `str` module exports multiple [`Matcher`]s that match characters of common kinds and patterns, like [`alpha`], [`ws`], [`lower`], [`hex`]...
+//! the `str` module exports multiple [`Matcher`]s that match characters of common kinds, such as [`alpha`], [`ws`], [`lower`] and [`hex`].
 //!
 //! ```
 //! assert!(matches("a", alpha));
@@ -113,7 +113,7 @@ impl Matcher<str> for str {
 	}
 }
 
-/// transform `a` into `"a"`
+/// wrap `a` in double quotes: `a` -> `"a"`
 fn wrap_with_quotes(a: impl Display) -> LeanString {
 	let mut str = LeanString::new();
 	write!(str, "\"{a}\"").unwrap();
@@ -145,9 +145,9 @@ macro_rules! define_char_patterns {
 				"matches ", $kind, ".\n\n",
 				"`", stringify!($name), "` is a [`Matcher`] that matches a character satisfying ",
 				$satisfy, ", and captures it as a `str` slice.\n\n",
-				$("this is unicode aware, for ascii only version, see [`", $ascii_equiv, "`].\n\n",)?
-				$("this is ascii only, for unicode aware version, see [`", $unicode_equiv, "`].\n\n",)?
-				"# example \n\n```\n",
+				$("this is unicode-aware; for the ascii-only version, see [`", $ascii_equiv, "`].\n\n",)?
+				$("this is ascii-only; for the unicode-aware version, see [`", $unicode_equiv, "`].\n\n",)?
+				"# example\n\n```\n",
 				"assert_eq!(try_match(\"", $match_1, "\", ", stringify!($name), "), Some(\"",
 				$match_1, "\"));\n",
 				"assert!(matches(\"", $match_2, "\", ", stringify!($name), "));\n",
@@ -164,7 +164,7 @@ macro_rules! define_char_patterns {
 			use lean_string::LeanString;
 			$(
 				#[doc = concat!(
-					"[", stringify!($name), "](crate::str::", stringify!($name), ")",
+					"the [", stringify!($name), "](crate::str::", stringify!($name), ")",
 					" [`Matcher`](crate::Matcher).")
 				]
 				#[derive(Debug, Clone, Copy, PartialEq)]
@@ -259,7 +259,7 @@ define_char_patterns![
 		match_1: "!", match_2: "#", mismatch: "a"
 	), (
 		dec, Dec, by: |char| matches!(char, '0'..='9'),
-		kind: "a decimal digit", satisfy: "`'0'..'9'",
+		kind: "a decimal digit", satisfy: "`'0'..'9'`",
 		match_1: "0", match_2: "9", mismatch: "a"
 	), (
 		hex, Hex, by: |char| matches!(char, '0'..='9' | 'a'..='f' | 'A'..='F'),
@@ -284,11 +284,11 @@ define_char_patterns![
 	)
 ];
 
-/// matches a digit character of given `radix`.
+/// matches a digit character of the given `radix`.
 ///
-/// `digit` creates a [`Matcher`] that matches a character that is a digit of `radix` between `2` and `36` inclusive.
+/// `digit` creates a [`Matcher`] that matches a digit character of the given `radix`, which must be between `2` and `36` inclusive.
 ///
-/// it is based on [`char::is_digit`], and captures the character `str` slice.
+/// it is based on [`char::is_digit`], and captures the matched character as a `str` slice.
 ///
 /// # example
 /// ```
@@ -302,7 +302,7 @@ pub fn digit(radix: u8) -> Digit {
 	Digit(radix)
 }
 
-/// [str](crate::str) items [`Matcher`]s
+/// the [`Matcher`] types behind the [str](crate::str) items
 pub mod matchers {
 	use core::fmt::Write;
 	use lean_string::LeanString;
@@ -316,7 +316,7 @@ pub mod matchers {
 	#[doc(inline)]
 	pub use super::char_pattern_matchers::*;
 
-	/// [`digit`](crate::str::digit) [`Matcher`].
+	/// the [`digit`](crate::str::digit) [`Matcher`].
 	pub struct Digit(pub(crate) u8);
 	impl Matcher<str> for Digit {
 		type Capture<'src> = &'src str;

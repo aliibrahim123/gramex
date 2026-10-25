@@ -1,30 +1,30 @@
-//! gramex imperative mode for advanced parsing.
+//! gramex's imperative mode for advanced parsing.
 //!
-//! cursor module provides a solution for cases where the [grammar expressions](crate::gram_ref) are not enough: non-basic error side, highly custom parsing operations, advanced recovery strategies, context sensitive parsing, fully visible matching logic for determinism and efficiency.
+//! the `cursor` module provides a solution for cases where [grammar expressions](crate::gram_ref) are not enough: non-trivial error handling, highly custom parsing operations, advanced recovery strategies, context-sensitive parsing, and fully visible matching logic for determinism and efficiency.
 //!
-//! the core of this module is [`Cursor`], a `(MatchAble, offset)` tuple that acts as a lightweight matching context passed around the matching logic and providing helpful and common utilities.
+//! the core of this module is [`Cursor`], a `(MatchAble, offset)` tuple that acts as a lightweight matching context, passed around the matching logic and providing common, helpful utilities.
 //!
-//! the [`Cursor`] provides the typical unconstrained imperative experience of rust with all its features, while enriching it with the power of [`Matcher`] and its universality and expressiveness through a set of utilities.
+//! the [`Cursor`] provides the typical unconstrained imperative experience of Rust with all its features, while enriching it with the power, universality and expressiveness of [`Matcher`] through a set of utilities.
 //!
 //! # quick overview
-//! at its core, a [`Cursor`] is a tuple of [`Matcher::do_match`] inputs, it hides all the manual offset handling and exposes only a set of declarative matching actions reflecting the [`Mode`] [tiers](crate::modes) with the cursor's own twist: [`eat`](Cursor::eat), [`try_eat`](Cursor::try_eat), and [`test`](Cursor::test).
+//! at its core, a [`Cursor`] is a tuple of [`Matcher::do_match`] inputs. it hides all manual offset handling and exposes only a set of declarative matching actions that reflect the [`Mode`] [tiers](crate::modes), with the cursor's own twist: [`eat`](Cursor::eat), [`try_eat`](Cursor::try_eat) and [`test`](Cursor::test).
 //! ```
 //! let cur = MyCursor::new("input");
-//! // `eat`: match by a `Matcher` with `Parse` mode
+//! // `eat`: match with a `Matcher` in `Parse` mode
 //! cur.eat("let")?;
 //!
-//! // `try_eat`: atomically match with `Capture` mode
+//! // `try_eat`: atomically match in `Capture` mode
 //! if let Some(nb) = cur.try_eat(nb) {
 //!     Expr::Nb(nb)
 //! }
 //!
-//! /// `test`: match with `Test` mode without advancing
+//! // `test`: match in `Test` mode without advancing
 //! if cur.test('[') {
 //!     parse_arr(cur)
 //! }
 //! ```
 //!
-//! these methods also have a macro equivalent taking a [grammar expression](crate::gram_ref)
+//! each of these methods also has a macro equivalent that takes a [grammar expression](crate::gram_ref):
 //! ```
 //! // uuid
 //! let (a, b, c, d, e) = eat!(cur,
@@ -37,26 +37,26 @@
 //!
 //! let is_sign = test!(cur, '-' | '+');
 //!
-//! // `match_map`: grammar based match expression
+//! // `match_map`: grammar-based match expression
 //! match_map!(cur, {
 //!     '+' => Expr::Plus,
-//!     '-' => Expr::Minus
+//!     '-' => Expr::Minus,
 //!     '*' => Expr::Mult,
-//!     '/' => Expr::Div
+//!     '/' => Expr::Div,
 //!     // default case
 //!     else => break,
 //! })
 //! ```
 //!
-//! in addition, [`Cursor`] also provides several methods to simplify manual matching logic.
+//! in addition, [`Cursor`] provides several methods that simplify manual matching logic.
 //! ```
-//! // `peek`: get current token
+//! // `peek`: get the current token
 //! if let Some(Token::Nb(nb)) = cur.peek() {
-//!     // skip 1 token
+//!     // skip one token
 //!     cur.skip();
 //!     Expr::Nb(nb)
 //! } else {
-//!     // `MatchError::expected` at current offset
+//!     // `MatchError::expected` at the current offset
 //!     cur.expected("number")
 //! }
 //!
@@ -65,12 +65,12 @@
 //! }
 //!
 //! if cur.try_eat("something").is_none() {
-//!     // `rewind`: set offset
+//!     // `rewind`: set the offset
 //!     cur.rewind(start);
 //! }
 //! ```
 //!
-//! [`Cursor`] is usually used with custom enum-based token lists, which can be automatically generated with the [`derive`](crate::derive) module.
+//! [`Cursor`] is usually used with custom enum-based token lists, whose matchers can be generated automatically by the [`derive`](crate::derive) module.
 //! ```
 //! #[derive_enum_matcher]
 //! #[derive(Debug, PartialEq)]
@@ -104,13 +104,13 @@ use crate::{
 	result::{Expected, MatchError, MatchResult},
 };
 
-/// match by a [grammar expression](crate::gram_ref) at the current offset.
+/// match with a [grammar expression](crate::gram_ref) at the current offset.
 ///
 /// ```gramex
 /// let body = cur:rust_expr ',' expr;
 /// ```
 ///
-/// the `eat` macro takes the [`Cursor`] and the expression, matches it with [`Parse`](crate::modes::Parse) [`Mode`] and returns `Result<Capture, Cursor::Error>`.
+/// the `eat` macro takes the [`Cursor`] and the expression, matches it in [`Parse`](crate::modes::Parse) [`Mode`] and returns `Result<Capture, Cursor::Error>`.
 ///
 /// it is the macro equivalent of [`Cursor::eat`].
 ///
@@ -123,18 +123,18 @@ use crate::{
 #[cfg(feature = "macros")]
 pub use gramex_macro::eat;
 
-/// [grammar](crate::gram_ref) based match expression for [`Cursor`].
+/// a [grammar](crate::gram_ref)-based match expression for [`Cursor`].
 ///
 /// ```gramex
 /// let arm = pat:expr "=>" map:rust_expr;
 /// let body = cur:rust_expr ',' '{' arm* ("else" "=>" rust_expr)? '}';
 /// ```
 ///
-/// the `match_map` macro takes the [`Cursor`] and a list of `pat => map` arms, and optionally an `else` arm at the end, and evaluates to the type of `map`.
+/// the `match_map` macro takes the [`Cursor`], a list of `pat => map` arms and, optionally, a final `else` arm; it evaluates to the type of `map`.
 ///
-/// it tries to match atomically each `pat` in order with [`Capture`](crate::modes::Capture) [`Mode`], on first match, its `map` expression gets evaluated as a result with [captures](crate::gram_ref#captures) bound by their name.
+/// it atomically tries to match each `pat` in order, in [`Capture`](crate::modes::Capture) [`Mode`]; on the first match, its `map` expression is evaluated as the result, with [captures](crate::gram_ref#captures) bound by their names.
 ///
-/// otherwise it evaluates the `else` arm as result if found, else it panics with [`unreachable!`].
+/// if no arm matches, it evaluates the `else` arm if present, and otherwise panics with [`unreachable!`].
 ///
 /// # example
 /// ```
@@ -155,13 +155,13 @@ pub use gramex_macro::eat;
 #[cfg(feature = "macros")]
 pub use gramex_macro::match_map;
 
-/// match by a [grammar expression](crate::gram_ref) at the current offset without advancing.
+/// match with a [grammar expression](crate::gram_ref) at the current offset, without advancing.
 ///
 /// ```gramex
 /// let body = cur:rust_expr ',' expr;
 /// ```
 ///
-/// the `test` macro takes the [`Cursor`] and the expression, matches it with [`Test`] [`Mode`] and returns `bool` as the result.
+/// the `test` macro takes the [`Cursor`] and the expression, matches it in [`Test`] [`Mode`] and returns a `bool` as the result.
 ///
 /// it is the macro equivalent of [`Cursor::test`].
 ///
@@ -177,13 +177,13 @@ pub use gramex_macro::match_map;
 #[cfg(feature = "macros")]
 pub use gramex_macro::test;
 
-/// try match by a [grammar expression](crate::gram_ref) at the current offset.
+/// try to match with a [grammar expression](crate::gram_ref) at the current offset.
 ///
 /// ```gramex
 /// let body = cur:rust_expr ',' expr;
 /// ```
 ///
-/// the `try_eat` macro takes the [`Cursor`] and the expression, matches it with [`Capture`](crate::modes::Capture) [`Mode`] and returns `Option<Capture>`.
+/// the `try_eat` macro takes the [`Cursor`] and the expression, matches it in [`Capture`](crate::modes::Capture) [`Mode`] and returns an `Option<Capture>`.
 ///
 /// it is the macro equivalent of [`Cursor::try_eat`].
 ///
@@ -200,11 +200,11 @@ pub use gramex_macro::try_eat;
 
 /// a simple span for simple cases.
 ///
-/// `SimpleSpan` is a data structure that represents a range of source code.
+/// `SimpleSpan` is a data structure that represents a range in the source.
 ///
 /// it is used when you just need a span as simple as a [`Range`](core::ops::Range).
 ///
-/// **point span**: span spanning 1 unitary token.
+/// **point span**: a span covering exactly one unit-sized token.
 ///
 /// # example
 /// ```
@@ -213,9 +213,9 @@ pub use gramex_macro::try_eat;
 /// assert_eq!(span.to_string(), "1..3");
 ///
 /// assert!(!span.is_point());
-/// assert!(Span::point(1).is_point());
+/// assert!(SimpleSpan::point(1).is_point());
 ///
-/// assert!(span.join(&Span::new(2, 4)) == Span::new(1, 4));
+/// assert!(span.join(&SimpleSpan::new(2, 4)) == SimpleSpan::new(1, 4));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SimpleSpan<T = usize> {
@@ -225,7 +225,7 @@ pub struct SimpleSpan<T = usize> {
 	pub end: T,
 }
 impl<T: Clone + PartialEq + Ord + Add<Output = T> + From<u8>> SimpleSpan<T> {
-	/// create a new span
+	/// create a new span.
 	///
 	/// # example
 	/// ```
@@ -235,7 +235,7 @@ impl<T: Clone + PartialEq + Ord + Add<Output = T> + From<u8>> SimpleSpan<T> {
 		Self { start, end }
 	}
 
-	/// create a point span
+	/// create a point span.
 	///
 	/// # example
 	/// ```
@@ -245,7 +245,7 @@ impl<T: Clone + PartialEq + Ord + Add<Output = T> + From<u8>> SimpleSpan<T> {
 		Self::new(ind.clone(), ind + 1.into())
 	}
 
-	/// check if the span is a point span
+	/// check whether the span is a point span.
 	///
 	/// # example
 	/// ```
@@ -256,16 +256,14 @@ impl<T: Clone + PartialEq + Ord + Add<Output = T> + From<u8>> SimpleSpan<T> {
 		self.start.clone() + 1.into() == self.end
 	}
 
-	/// join two spans.
-	///
-	/// from the smallest start to the largest end, even disjoint ones.
+	/// join two spans, from the smallest start to the largest end, even if they are disjoint.
 	///
 	/// # example
 	/// ```
-	/// assert_eq!(Span::join(&Span::new(1, 3), &Span::new(2, 4)), Span::new(1, 4));
-	/// assert_eq!(Span::join(&Span::new(1, 3), &Span::new(1, 4)), Span::new(1, 4));
-	/// assert_eq!(Span::join(&Span::new(1, 4), &Span::new(2, 3)), Span::new(1, 4));
-	/// assert_eq!(Span::join(&Span::new(1, 1), &Span::new(3, 4)), Span::new(1, 4));
+	/// assert_eq!(SimpleSpan::join(&SimpleSpan::new(1, 3), &SimpleSpan::new(2, 4)), SimpleSpan::new(1, 4));
+	/// assert_eq!(SimpleSpan::join(&SimpleSpan::new(1, 3), &SimpleSpan::new(1, 4)), SimpleSpan::new(1, 4));
+	/// assert_eq!(SimpleSpan::join(&SimpleSpan::new(1, 4), &SimpleSpan::new(2, 3)), SimpleSpan::new(1, 4));
+	/// assert_eq!(SimpleSpan::join(&SimpleSpan::new(1, 1), &SimpleSpan::new(3, 4)), SimpleSpan::new(1, 4));
 	/// ```
 	pub fn join(&self, other: &Self) -> Self {
 		Self::new(
@@ -282,7 +280,7 @@ impl Display for SimpleSpan {
 
 /// capture the span of what `matcher` matches.
 ///
-/// `span_around` takes a [`Matcher`] and returns a [`Matcher`] that matches by the matcher, propagating its error and capturing the span of the section it matched.
+/// `span_around` takes a [`Matcher`] and returns a [`Matcher`] that matches with it, propagating its error and capturing the span of the section it matched.
 ///
 /// # example
 /// ```
@@ -296,7 +294,7 @@ pub fn span_around<T: MatchAble + ?Sized, M: Matcher<T>>(matcher: M) -> SpanArou
 	SpanAround(matcher)
 }
 
-/// [`span_around`] matcher
+/// the [`span_around`] matcher
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpanAround<M>(M);
 impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for SpanAround<U> {
@@ -315,22 +313,22 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for SpanAround<U> {
 
 /// a matching cursor for a [`MatchAble`].
 ///
-/// `Cursor` is a `(value, offset)` tuple that provides an imperative matching experience, enhanced and integrated with the rest of gramex ecosystem.
+/// `Cursor` is a `(value, offset)` tuple that provides an imperative matching experience, enhanced by and integrated with the rest of the gramex ecosystem.
 ///
 /// for more info, read the [module documentation](crate::cursor).
 ///
 /// # implementation guide
-/// to implement `Cursor` for a custom type, the [`MatchAble`] must be specified, and the input and the offset must be provided through [`input`](Self::input), [`off`](Self::off) and [`off_mut`](Self::off_mut).
+/// to implement `Cursor` for a custom type, you must specify the [`MatchAble`] and provide the input and the offset through [`input`](Self::input), [`off`](Self::off) and [`off_mut`](Self::off_mut).
 ///
-/// in addition, the `Cursor` [`Error`](Self::Error) type must be specified alongside its mapping from [`MatchError`] through [`map_error`](Self::map_error).
+/// in addition, you must specify the `Cursor`'s [`Error`](Self::Error) type, along with its mapping from [`MatchError`] through [`map_error`](Self::map_error).
 ///
-/// the `Cursor` has a `'src` lifetime used to split the input [slices](MatchAble::Slice) lifetime from `Cursor` inner mutations.
+/// the `Cursor` has a `'src` lifetime that separates the lifetime of the input [slices](MatchAble::Slice) from the `Cursor`'s own mutations.
 /// ```
 /// struct MyCursor<'src> {
-///     // input lives outside cursor for captures lifetimes independent from cursor mutation
+///     // the input lives outside the cursor, so capture lifetimes are independent of cursor mutation
 ///     value: &'src Tokens<'src>,
 ///     off: usize,
-///     // support multiple errors
+///     // supports multiple errors
 ///     errors: Vec<String>,
 /// }
 /// impl<'src> Cursor<'src> for MyCursor<'src> {
@@ -352,16 +350,16 @@ impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for SpanAround<U> {
 /// }
 /// ```
 ///
-/// and if you just need a simple cursor with unmodified [`MatchError`], check out [`SimpleCursor`].
+/// if you just need a simple cursor with unmodified [`MatchError`]s, see [`SimpleCursor`].
 pub trait Cursor<'src> {
 	/// the [`MatchAble`] the `Cursor` works on.
 	type MatchAble: MatchAble + ?Sized + 'src;
-	/// the `Cursor` custom error type.
+	/// the `Cursor`'s custom error type.
 	type Error;
 
 	/// return a reference to the [`MatchAble`] the `Cursor` works on.
 	///
-	/// this reference is unaffected by the `Cursor` mutations.
+	/// this reference is unaffected by `Cursor` mutations.
 	fn input(&self) -> &'src Self::MatchAble;
 
 	/// return the current offset.
@@ -369,14 +367,14 @@ pub trait Cursor<'src> {
 	/// return a mutable reference to the offset.
 	fn off_mut(&mut self) -> &mut usize;
 
-	/// convert a [`MatchError`] to the `Cursor` [`Error`](Self::Error) type.
+	/// convert a [`MatchError`] to the `Cursor`'s [`Error`](Self::Error) type.
 	fn map_error(&mut self, err: MatchError) -> Self::Error;
 
 	/// get the [token](MatchAble::Token) at the current offset.
 	///
 	/// `peek` uses [`MatchAble::get_token`] under the hood.
 	///
-	/// it returns `None` on end of input.
+	/// it returns `None` at the end of the input.
 	///
 	/// # example
 	/// ```
@@ -390,11 +388,11 @@ pub trait Cursor<'src> {
 		self.input().get_token(self.off())
 	}
 
-	/// get the [token](MatchAble::Token) at `n` tokens ahead of the current one.
+	/// get the [token](MatchAble::Token) `n` tokens ahead of the current one.
 	///
 	/// `peek_next` uses [`MatchAble::skip_n`] under the hood.
 	///
-	/// it returns `None` on end of input.
+	/// it returns `None` at the end of the input.
 	///
 	/// # example
 	/// ```
@@ -403,7 +401,6 @@ pub trait Cursor<'src> {
 	/// assert_eq!(cur.peek_next(1), Some('b'));
 	/// assert_eq!(cur.peek_next(2), Some('c'));
 	/// assert_eq!(cur.peek_next(3), None);
-	///
 	/// ```
 	#[inline]
 	fn peek_next(&self, n: usize) -> Option<<Self::MatchAble as MatchAble>::Token<'src>> {
@@ -413,7 +410,7 @@ pub trait Cursor<'src> {
 		input.get_token(off)
 	}
 
-	/// check if the `Cursor` is at the end of the input.
+	/// check whether the `Cursor` is at the end of the input.
 	///
 	/// # example
 	/// ```
@@ -427,9 +424,9 @@ pub trait Cursor<'src> {
 		self.off() == self.input().len()
 	}
 
-	/// match by a [`Matcher`] at the current offset.
+	/// match with a [`Matcher`] at the current offset.
 	///
-	/// `eat` uses [`Parse`](crate::modes::Parse) [`Mode`] and the [`Cursor::Error`] instead of [`MatchError`].
+	/// `eat` uses [`Parse`](crate::modes::Parse) [`Mode`] and returns the `Cursor`'s [`Error`](Self::Error) instead of a [`MatchError`].
 	///
 	/// # example
 	/// ```
@@ -445,11 +442,11 @@ pub trait Cursor<'src> {
 		matcher.parse(self.input(), self.off_mut()).map_err(|err| self.map_error(err))
 	}
 
-	/// try match by a [`Matcher`] at the current offset.
+	/// try to match with a [`Matcher`] at the current offset.
 	///
 	/// `try_eat` uses [`Capture`](crate::modes::Capture) [`Mode`].
 	///
-	/// it fails atomically, and returns `None` on failure.
+	/// it is atomic: on failure, it returns `None` and leaves the offset unchanged.
 	///
 	/// # example
 	/// ```
@@ -467,9 +464,9 @@ pub trait Cursor<'src> {
 		matcher.capture(self.input(), &mut off).inspect(|_| *self.off_mut() = off)
 	}
 
-	/// match by a [`Matcher`] without advancing at the current offset.
+	/// match with a [`Matcher`] at the current offset, without advancing.
 	///
-	/// `test` uses [`Test`] [`Mode`], and returns `false` on failure.
+	/// `test` uses [`Test`] [`Mode`] and returns `false` on failure.
 	///
 	/// # example
 	/// ```
@@ -485,14 +482,14 @@ pub trait Cursor<'src> {
 		matcher.test(self.input(), &mut self.off())
 	}
 
-	/// capture a token.
+	/// capture the next token and advance past it.
 	///
 	/// # example
 	/// ```
 	/// let mut cur = SimpleCursor::new("abc");
-	/// assert_eq!(cur.eat_token(), Ok("a"));
-	/// assert_eq!(cur.eat_token(), Ok("b"));
-	/// assert_eq!(cur.eat_token(), Ok("c"));
+	/// assert_eq!(cur.eat_token(), Ok('a'));
+	/// assert_eq!(cur.eat_token(), Ok('b'));
+	/// assert_eq!(cur.eat_token(), Ok('c'));
 	/// assert!(cur.eat_token().is_err());
 	/// ```
 	#[inline]
@@ -504,14 +501,14 @@ pub trait Cursor<'src> {
 		Ok(self.input().get_token(start).unwrap())
 	}
 
-	/// try capture a token
+	/// try to capture the next token and advance past it.
 	///
 	/// # example
 	/// ```
 	/// let mut cur = SimpleCursor::new("abc");
-	/// assert_eq!(cur.try_eat_token(), Some("a"));
-	/// assert_eq!(cur.try_eat_token(), Some("b"));
-	/// assert_eq!(cur.try_eat_token(), Some("c"));
+	/// assert_eq!(cur.try_eat_token(), Some('a'));
+	/// assert_eq!(cur.try_eat_token(), Some('b'));
+	/// assert_eq!(cur.try_eat_token(), Some('c'));
 	/// assert!(cur.try_eat_token().is_none());
 	/// ```
 	#[inline]
@@ -523,7 +520,7 @@ pub trait Cursor<'src> {
 
 	/// advance the `Cursor` by one token.
 	///
-	/// `skip` uses [`MatchAble::skip_n`] under the hood, and acts as a noop at end of input.
+	/// `skip` uses [`MatchAble::skip_n`] under the hood, and is a no-op at the end of the input.
 	///
 	/// # example
 	/// ```
@@ -558,7 +555,7 @@ pub trait Cursor<'src> {
 
 	/// generate a [`MatchError`] with the given [`Expected`].
 	///
-	/// generates a [mismatch](crate::result::MatchErrorKind::MisMatch) or [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`] depending on whether the `Cursor` is at the end of the input, then maps it through [`map_error`](Self::map_error).
+	/// it generates a [mismatch](crate::result::MatchErrorKind::MisMatch) or [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`], depending on whether the `Cursor` is at the end of the input, then maps it through [`map_error`](Self::map_error).
 	///
 	/// # example
 	/// ```
@@ -584,7 +581,7 @@ pub trait Cursor<'src> {
 
 /// a simple [`Cursor`] for simple cases.
 ///
-/// the `SimpleCursor` is the simplest [`Cursor`] possible, a real `(input, off)` tuple with regular [`MatchError`] and no extra bloat.
+/// `SimpleCursor` is the simplest possible [`Cursor`]: a plain `(input, off)` tuple with the regular [`MatchError`] and no extra bloat.
 ///
 /// # example
 /// ```
@@ -607,7 +604,7 @@ pub struct SimpleCursor<'src, T: MatchAble + ?Sized + 'src> {
 	pub off: usize,
 }
 impl<'src, T: MatchAble + ?Sized> SimpleCursor<'src, T> {
-	/// create a new `SimpleCursor` wrapping the given input
+	/// create a new `SimpleCursor` wrapping the given input.
 	pub fn new(input: &'src T) -> Self {
 		Self { input, off: 0 }
 	}

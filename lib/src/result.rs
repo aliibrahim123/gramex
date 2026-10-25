@@ -1,4 +1,4 @@
-//! items for a general [`MatchResult`] and its [`MatchError`].
+//! general-purpose [`MatchResult`] and [`MatchError`] items.
 
 use crate::Mode;
 use alloc_crate::vec::Vec;
@@ -10,29 +10,29 @@ use lean_string::LeanString;
 
 /// what was expected to be matched.
 ///
-/// `Expected` is a data structure that expresses what the matching logic was expected to match but failed at a given point.
+/// `Expected` is a data structure that expresses what the matching logic expected to match at the point where it failed.
 ///
-/// `Expected` is an optional part inside [`MatchError`] that is advised for every general matcher to provide for better error messages.
+/// `Expected` is an optional part of [`MatchError`] that every general matcher is advised to provide, for better error messages.
 ///
 /// `Expected` uses [`LeanString`] to store small strings inline.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum Expected {
-	/// undefined `Expected` value.
+	/// an undefined `Expected` value.
 	///
-	/// used when the `Expected` is difficult to compute or not important.
+	/// used when the expectation is hard to compute or unimportant.
 	///
 	/// # example
 	/// ```
 	/// assert_eq!(Expected::None.to_string(), "");
 	/// assert_eq!(Expected::default(), Expected::None);
-	/// assert_eq!(<() as Matcher<str>>::expected(), Expected::None);
+	/// assert_eq!(<() as Matcher<str>>::expected(&()), Expected::None);
 	/// ```
 	#[default]
 	None,
 
-	/// expected whatever non-empty thing.
+	/// expected something non-empty.
 	///
-	/// useful for [`skip_n`](crate::MatchAble::skip_n) and anything like it.
+	/// useful for [`skip_n`](crate::MatchAble::skip_n) and similar operations.
 	///
 	/// # example
 	/// ```
@@ -43,7 +43,7 @@ pub enum Expected {
 
 	/// expected a specific thing.
 	///
-	/// the most common `Expected` kind, being only any string.
+	/// the most common `Expected` kind; it holds an arbitrary string.
 	///
 	/// # example
 	/// ```
@@ -53,9 +53,9 @@ pub enum Expected {
 	/// ```
 	A(LeanString),
 
-	/// expected anything not a specific thing.
+	/// expected anything except a specific thing.
 	///
-	/// used by [not operator](crate::gram_ref#not-operator), and anything similar to it.
+	/// used by the [not operator](crate::gram_ref#not-operator) and similar constructs.
 	///
 	/// # example
 	/// ```
@@ -64,14 +64,14 @@ pub enum Expected {
 	/// ```
 	Not(LeanString),
 
-	/// expected one of specific things.
+	/// expected one of several specific things.
 	///
-	/// used by [or expression](crate::gram_ref#or-expression), and anything similar to it.
+	/// used by the [or expression](crate::gram_ref#or-expression) and similar constructs.
 	///
 	/// # example
 	/// ```
 	/// let expected = Expected::OneOf(vec!["thing1".into(), "thing2".into(), "thing3".into()]);
-	/// assert_eq!(expected.to_string(), "one of thing1, thing2, thing3"#);
+	/// assert_eq!(expected.to_string(), "one of thing1, thing2, thing3");
 	/// assert_eq!(Expected::from(["thing1", "thing2", "thing3"]), expected);
 	/// assert_eq!(
 	///     matcher!(for str, "a" | "b" | "c").expected(),
@@ -80,9 +80,9 @@ pub enum Expected {
 	/// ```
 	OneOf(Vec<LeanString>),
 
-	/// expected a range of things.
+	/// expected something within a range.
 	///
-	/// used by [range atom](crate::gram_ref#range-atom) and range based [`Matcher`](crate::Matcher).
+	/// used by the [range atom](crate::gram_ref#range-atom) and range-based [`Matcher`](crate::Matcher)s.
 	///
 	/// # example
 	/// ```
@@ -147,11 +147,11 @@ impl Display for Expected {
 	}
 }
 
-/// the what of [`MatchError`]
+/// the "what" of a [`MatchError`].
 ///
-/// the `MatchErrorKind` encodes the kind of [`MatchError`], whether it is [mismatch](Self::MisMatch), [incomplete](Self::InComplete), and whatever.
+/// `MatchErrorKind` encodes what kind of error a [`MatchError`] is: a [mismatch](Self::MisMatch), [incomplete](Self::InComplete) input, [excess](Self::Excess) input, or something else.
 ///
-/// `MatchErrorKind` is generally not manually constructed; instead, a constructor function is provided for every kind in [`MatchError`].
+/// `MatchErrorKind` is generally not constructed manually; instead, [`MatchError`] provides a constructor function for every kind.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MatchErrorKind {
 	/// a mismatch between what was [`Expected`] and what was found.
@@ -166,7 +166,7 @@ pub enum MatchErrorKind {
 	/// ```
 	MisMatch(Expected),
 
-	/// an incomplete input while expecting something.
+	/// incomplete input where something was expected.
 	///
 	/// # example
 	/// ```
@@ -178,7 +178,7 @@ pub enum MatchErrorKind {
 	/// ```
 	InComplete(Expected),
 
-	/// an excess input.
+	/// excess input.
 	///
 	/// # example
 	/// ```
@@ -187,9 +187,9 @@ pub enum MatchErrorKind {
 	/// ```
 	Excess,
 
-	/// other kinds of user defined error.
+	/// other, user-defined kinds of error.
 	///
-	/// just a string you define
+	/// simply a string that you define.
 	///
 	/// # example
 	/// ```
@@ -203,22 +203,22 @@ pub enum MatchErrorKind {
 
 /// an error encountered during matching.
 ///
-/// the `MatchError` is a general and good enough error type used universally by every [`Matcher`](crate::Matcher) and the general utilities powered by it.
+/// `MatchError` is a general-purpose error type that is good enough for most uses, used universally by every [`Matcher`](crate::Matcher) and by the general utilities built on top of them.
 ///
-/// it is composed of a [`MatchErrorKind`] representing its kind, an `offset` representing where it occurred, and optionally an [`Expected`] representing what was expected to be.
+/// it is composed of a [`MatchErrorKind`] describing its kind and an offset `off` describing where it occurred; the kind may carry an [`Expected`] describing what was expected.
 ///
-/// `MatchError` is generally constructed through the various constructors provided by it.
+/// `MatchError` is generally constructed through its constructor functions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MatchError {
 	/// the kind of the error
 	pub kind: MatchErrorKind,
-	/// the offset of where the error occurred
+	/// the offset where the error occurred
 	pub off: usize,
 }
 impl MatchError {
 	/// create a `MatchError` of kind [`MisMatch`](MatchErrorKind::MisMatch).
 	///
-	/// it takes what is [`Expected`] and the offset where the error occurred.
+	/// it takes the [`Expected`] value and the offset at which the error occurred.
 	///
 	/// # example
 	/// ```
@@ -234,7 +234,7 @@ impl MatchError {
 
 	/// create a `MatchError` of kind [`InComplete`](MatchErrorKind::InComplete).
 	///
-	/// it takes what is [`Expected`] and the offset where the error occurred.
+	/// it takes the [`Expected`] value and the offset at which the error occurred.
 	///
 	/// # example
 	/// ```
@@ -248,11 +248,11 @@ impl MatchError {
 		Self { kind: MatchErrorKind::InComplete(expected), off }
 	}
 
-	/// create a `MatchError` expecting an [`Expected`].
+	/// create a `MatchError` for an [`Expected`] value.
 	///
-	/// the result error kind is either [`MisMatch`](MatchErrorKind::MisMatch) or [`InComplete`](MatchErrorKind::InComplete) depending on `is_incomplete`.
+	/// the resulting kind is either [`MisMatch`](MatchErrorKind::MisMatch) or [`InComplete`](MatchErrorKind::InComplete), depending on `is_incomplete`.
 	///
-	/// it takes an offset where the error occurred.
+	/// it takes the offset at which the error occurred.
 	///
 	/// # example
 	/// ```
@@ -265,7 +265,7 @@ impl MatchError {
 	///     MatchError::incomplete("thing".into(), 1),
 	/// );
 	///
-	/// // in matcher
+	/// // in a matcher
 	/// M::err(|| MatchError::expected("thing".into(), *off == matched.len(), *off))
 	/// ```
 	pub fn expected(expected: Expected, is_incomplete: bool, off: usize) -> Self {
@@ -277,7 +277,7 @@ impl MatchError {
 
 	/// create a `MatchError` of kind [`Excess`](MatchErrorKind::Excess).
 	///
-	/// it takes the offset where the error occurred.
+	/// it takes the offset at which the error occurred.
 	///
 	/// # example
 	/// ```
@@ -290,7 +290,7 @@ impl MatchError {
 
 	/// create a `MatchError` of kind [`Other`](MatchErrorKind::Other).
 	///
-	/// it takes a message and the offset where the error occurred.
+	/// it takes a message and the offset at which the error occurred.
 	///
 	/// # example
 	/// ```
@@ -319,12 +319,12 @@ impl Display for MatchError {
 }
 impl core::error::Error for MatchError {}
 
-/// the matching result created universally by every [`Matcher`](crate::Matcher).
+/// the matching result produced by every [`Matcher`](crate::Matcher).
 ///
-/// `MatchResult` is a `Result<T, MatchError>` generic over [`Mode`], it is:
+/// `MatchResult` is a `Result<T, MatchError>`-like type, generic over [`Mode`]:
 ///
 /// | [`Mode`]                           | `Ok` | `Err`          | simplified form |
-/// | ---------------------------------- | ---- |- ------------- | --------------- |
+/// | ---------------------------------- | ---- | -------------- | --------------- |
 /// | [`Test`](crate::modes::Test)       | `()` | `()`           | `bool`          |
 /// | [`Check`](crate::modes::Check)     | `()` | [`MatchError`] | same            |
 /// | [`Capture`](crate::modes::Capture) | `T`  | `()`           | `Option<T>`     |
@@ -334,9 +334,9 @@ pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;
 
 /// convert the type into a [`MatchResult`].
 ///
-/// [`into_result`](Self::into_result) takes an offset for `Err` if needed and the [`Mode`] and returns a [`MatchResult`] corresponding to `self`.
+/// [`into_result`](Self::into_result) takes an offset (used for the `Err` case, if needed) and a [`Mode`], and returns the [`MatchResult`] corresponding to `self`.
 ///
-/// the implementing types are:
+/// it is implemented for:
 ///
 /// | type             | `Ok`          | `Err`                                                          |
 /// | ---------------- | ------------- | -------------------------------------------------------------- |
@@ -359,7 +359,7 @@ pub type MatchResult<T, M: Mode> = Result<M::Success<T>, M::Error>;
 /// );
 /// ```
 pub trait IntoResult: Sized {
-	/// the `Ok` type of [`MatchResult`], not modified by the [`Mode`].
+	/// the `Ok` type of [`MatchResult`], before it is transformed by the [`Mode`].
 	type Success;
 
 	/// convert the type into a [`MatchResult`], given an offset and a [`Mode`].

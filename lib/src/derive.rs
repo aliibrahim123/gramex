@@ -1,11 +1,11 @@
-//! macros for deriving core traits
+//! macros for deriving the core traits
 
 use crate::{
 	MatchAble, Mode,
 	result::{Expected, MatchError, MatchResult},
 };
 
-/// `match_do` generalization for matching by token
+/// a generalization of `do_match` for matching by token
 #[doc(hidden)]
 pub fn match_token<'src, M: Mode, T: MatchAble + ?Sized>(
 	value: &'src T, off: &mut usize, pred: impl FnOnce(T::Token<'src>) -> Option<usize>,
@@ -22,7 +22,7 @@ pub fn match_token<'src, M: Mode, T: MatchAble + ?Sized>(
 	}
 }
 
-/// `match_do` generalization for matching by slice
+/// a generalization of `do_match` for matching by slice
 #[doc(hidden)]
 pub fn match_slice<'src, M: Mode, T: MatchAble + ?Sized, C>(
 	value: &'src T, off: &mut usize, size: usize,
@@ -39,7 +39,7 @@ pub fn match_slice<'src, M: Mode, T: MatchAble + ?Sized, C>(
 	}
 }
 
-/// slice based `Matcher` template
+/// slice-based `Matcher` template
 #[macro_export]
 #[doc(hidden)]
 #[rustfmt::skip]
@@ -69,7 +69,7 @@ macro_rules! define_slice_matcher {
 	};
 }
 
-/// token based `Matcher` template
+/// token-based `Matcher` template
 #[rustfmt::skip]
 #[macro_export]
 #[doc(hidden)]
@@ -97,7 +97,7 @@ macro_rules! define_token_matcher {
 	};
 }
 
-/// `AsRef` based `Matcher` template
+/// `AsRef`-based `Matcher` template
 #[macro_export]
 #[doc(hidden)]
 macro_rules! define_ref_matcher {
@@ -132,25 +132,25 @@ pub use {define_ref_matcher, define_slice_matcher, define_token_matcher};
 /// let body = type ',' matchers (',' expected)?;
 /// ```
 ///
-/// `derive_slice_matchable` generates a [`MatchAble`] implementation for slice newtype structs with some core [`Matcher`](crate::Matcher).
+/// `derive_slice_matchable` generates a [`MatchAble`] implementation, along with some core [`Matcher`](crate::Matcher)s, for slice newtype structs.
 ///
-/// slice newtype structs are any struct of kind `struct box<'src>(&'src [token])`.
+/// slice newtype structs are structs of the form `struct box<'src>(&'src [token])`.
 ///
-/// the `type` argument is `box(&[token])` where `box` is the [`MatchAble`] and `token` is its [`Token`](MatchAble::Token), `token` is given a `'slice` lifetime linked to the tokens slice.
+/// the `type` argument is `box(&[token])`, where `box` is the [`MatchAble`] and `token` is its [`Token`](MatchAble::Token) type; `token` is given a `'slice` lifetime linked to the token slice.
 ///
-/// the generated [`MatchAble`] implementation has [`Slice`](MatchAble::Slice) of `box`, [`Token`](MatchAble::Token) of `&token`, slice indices as the offsets, and other methods redirecting the inner slice ones.
+/// the generated [`MatchAble`] implementation has `box` as its [`Slice`](MatchAble::Slice), `&token` as its [`Token`](MatchAble::Token), slice indices as offsets, and other methods that delegate to the inner slice's.
 ///
 /// the `matchers` argument can be:
-/// - `false`: no extra [`Matcher`](crate::Matcher)s generated.
+/// - `false`: no extra [`Matcher`](crate::Matcher)s are generated.
 /// - `true`: generate [`Matcher`](crate::Matcher)s for `box`, `[token]` and `token`.
-/// - `WithRange`: generate additional [`Matcher`](crate::Matcher) for [`RangeInclusive<token>`](core::ops::RangeInclusive).
+/// - `WithRange`: additionally generate a [`Matcher`](crate::Matcher) for [`RangeInclusive<token>`](core::ops::RangeInclusive).
 ///
 /// the [`Matcher`](crate::Matcher)s capture the [`MatchAble::Slice`] they match.
 ///
-/// the `expected` is an optional part that specifies how [`Expected`] is created, it can be:
+/// the `expected` argument is optional and specifies how [`Expected`] is created. it can be:
 /// - `None`: [`Expected::None`].
-/// - `Debug`: [`Expected::A`] of the matcher's [`Debug`](core::fmt::Debug).
-/// - `Display`: [`Expected::A`] of the matcher's [`Display`](core::fmt::Display).
+/// - `Debug`: [`Expected::A`], built from the matcher's [`Debug`](core::fmt::Debug) output.
+/// - `Display`: [`Expected::A`], built from the matcher's [`Display`](core::fmt::Display) output.
 ///
 /// # example
 /// ```
@@ -301,7 +301,7 @@ macro_rules! derive_slice_matchable {
 #[doc(inline)]
 pub use derive_slice_matchable;
 
-/// derive kind [`Matcher`](crate::Matcher) for token enum.
+/// derive kind [`Matcher`](crate::Matcher)s for a token enum.
 ///
 /// ```gramex
 /// let field = "field" '=' rust_expr;
@@ -309,15 +309,15 @@ pub use derive_slice_matchable;
 /// let body = "for" matched_type:type (',' field)? (',' expected)?;
 /// ```
 ///
-/// the `derive_enum_matcher` is an attribute macro applied on enums that for each variant defines a [`Matcher`](crate::Matcher) that matches one [token](MatchAble::Token) of that variant.
+/// `derive_enum_matcher` is an attribute macro, applied to enums, that defines for each variant a [`Matcher`](crate::Matcher) matching one [token](MatchAble::Token) of that variant.
 ///
-/// it takes the [`MatchAble`] type, and defines the [`Matcher`](crate::Matcher) as kebab case of the variant name.
+/// it takes the [`MatchAble`] type, and names each [`Matcher`](crate::Matcher) after its variant, in snake case.
 ///
-/// if the variant is a tuple, the [`Capture`](crate::Matcher::Capture) is a tuple of the variant fields, else it is the matched [`Token`](MatchAble::Token).
+/// if the variant is a tuple variant, the [`Capture`](crate::Matcher::Capture) is a tuple of the variant's fields; otherwise it is the matched [`Token`](MatchAble::Token).
 ///
-/// the `field` argument is an optional field path that specifies where the enum is inside the token, if not specified, the enum is assumed to be the token.
+/// the `field` argument is an optional field path that specifies where the enum is located inside the token, if omitted, the enum is assumed to be the token itself.
 ///
-/// the `expected` argument is an optional path that resolves to a `Fn(var: &str) -> Expected` called with the variant name to generate the [`Expected`], if not specified, [`Expected::None`] is used.
+/// the `expected` argument is an optional path to a `Fn(var: &str) -> Expected`, which is called with the variant name to generate the [`Expected`], if omitted, [`Expected::None`] is used.
 ///
 /// # example
 /// ```

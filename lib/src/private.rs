@@ -1,6 +1,6 @@
-//! items and utilities used by generated code
+//! items and utilities used by the generated code
 
-// reexport used items from std for smaller paths
+// re-export frequently used std items for shorter paths
 pub use alloc_crate::vec::Vec;
 pub use core::convert::{Infallible, Into};
 pub use core::marker::PhantomData;
@@ -14,7 +14,7 @@ pub use crate::result::{Expected, MatchError, MatchResult};
 use crate::{MatchAble, Mode};
 use lean_string::ToLeanString;
 
-/// coerce the type into its `&MatchAble` version, using method expression coercion
+/// coerce the type into its `&MatchAble` form using method-call coercion
 pub trait AsMatchAble {
 	fn __as_matchable(&self) -> &Self {
 		self
@@ -22,7 +22,7 @@ pub trait AsMatchAble {
 }
 impl<T: MatchAble + ?Sized> AsMatchAble for T {}
 
-/// coerce the type into its `&mut Cursor` version, using method expression coercion
+/// coerce the type into its `&mut Cursor` form using method-call coercion
 pub trait AsCursor<T: ?Sized> {
 	fn __as_cursor(&mut self) -> &mut Self {
 		self
@@ -30,14 +30,14 @@ pub trait AsCursor<T: ?Sized> {
 }
 impl<'src, T: MatchAble + ?Sized, C: Cursor<'src, MatchAble = T>> AsCursor<T> for C {}
 
-/// produce [`Expected`] for a not modified unit
+/// produce an [`Expected`] for a negated unit
 pub fn expected_not(expected: &Expected) -> Expected {
 	match expected {
 		Expected::None => Expected::None,
 		_ => Expected::Not(expected.to_lean_string()),
 	}
 }
-/// produce [`Expected`] for an or expression
+/// produce an [`Expected`] for an or expression
 pub fn expected_or(cases: &[Expected]) -> Expected {
 	let mut resolved = Vec::with_capacity(cases.len());
 	for case in cases {
@@ -48,14 +48,14 @@ pub fn expected_or(cases: &[Expected]) -> Expected {
 	if resolved.is_empty() { Expected::None } else { Expected::OneOf(resolved) }
 }
 
-/// [`Result::unwrap`] but without the [`core::fmt::Debug`] bound
+/// like [`Result::unwrap`], but without the [`core::fmt::Debug`] bound
 pub fn unwrap_result<T, E>(r: Result<T, E>) -> T {
 	match r {
 		Ok(v) => v,
 		Err(_) => unreachable!(),
 	}
 }
-/// [`Mode`] independent `Ok(())`, also solving inference issues
+/// a [`Mode`]-independent `Ok(())` that also resolves inference issues
 pub fn ok_unit<M: Mode>() -> MatchResult<(), M> {
 	Ok(M::wrap_success(()))
 }

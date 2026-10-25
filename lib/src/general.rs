@@ -1,4 +1,4 @@
-//! general [`Matcher`]s that work on all [`MatchAble`]s.
+//! general [`Matcher`]s that work with all [`MatchAble`]s.
 
 use core::marker::PhantomData;
 
@@ -14,7 +14,7 @@ use crate::{
 
 /// matches the end of the input.
 ///
-/// `end` is a universal [`Matcher`] that matches with `()` when the `off == value.len()`, otherwise it fails with [excess](crate::result::MatchErrorKind::Excess) [`MatchError`](crate::result::MatchError).
+/// `end` is a universal [`Matcher`] that matches with `()` when `off == value.len()`; otherwise it fails with an [excess](crate::result::MatchErrorKind::Excess) [`MatchError`](crate::result::MatchError).
 ///
 /// # example
 /// ```
@@ -38,7 +38,7 @@ pub const pos: Pos = Pos;
 
 /// turn a [`Matcher`] into an atomic [`Matcher`].
 ///
-/// `atomic` takes a [`Matcher`] and returns a new [`Matcher`] that redirects matching to the input, and rewinds to the start offset on failure.
+/// `atomic` takes a [`Matcher`] and returns a new [`Matcher`] that delegates matching to it and rewinds to the start offset on failure.
 ///
 /// # example
 /// ```
@@ -57,12 +57,12 @@ pub fn atomic<T: MatchAble + ?Sized, U: Matcher<T>>(matcher: U) -> Atomic<T, U> 
 
 /// matches a [token](MatchAble::Token) with a predicate.
 ///
-/// `a` produces a [`Matcher`] that captures the current [token](MatchAble::Token) and tests it by `pred`. If `pred` returns `true` it matches with the token, else it fails.
+/// `a` produces a [`Matcher`] that captures the current [token](MatchAble::Token) and tests it with `pred`. if `pred` returns `true`, it matches with the token; otherwise it fails.
 ///
 /// # example
 /// ```
-/// let is_alpha = a(|c| c.is_alpha);
-/// assert_eq!(try_match("a", is_alpha), Ok('a'));
+/// let is_alpha = a(|c: char| c.is_alphabetic());
+/// assert_eq!(try_match("a", is_alpha), Some('a'));
 /// assert_eq!(try_match("1", is_alpha), None);
 /// assert_eq!(try_match("", is_alpha), None);
 /// ```
@@ -77,12 +77,12 @@ where
 
 /// matches a [slice](MatchAble::Slice) of `n` [tokens](MatchAble::Token) with a predicate.
 ///
-/// `an` produces a [`Matcher`] that captures a [slice](MatchAble::Slice) of `n` [tokens](MatchAble::Token) and tests it by `pred`. If `pred` returns `true` it matches with the slice, else it fails.
+/// `an` produces a [`Matcher`] that captures a [slice](MatchAble::Slice) of `n` [tokens](MatchAble::Token) and tests it with `pred`. if `pred` returns `true`, it matches with the slice; otherwise it fails.
 ///
 /// # example
 /// ```
-/// let is_4_lower = an(4, |c| c.chars().all(char::is_lowercase));
-/// assert_eq!(try_match("abcd", is_4_lower), Ok("abcd"));
+/// let is_4_lower = an(4, |c: &str| c.chars().all(char::is_lowercase));
+/// assert_eq!(try_match("abcd", is_4_lower), Some("abcd"));
 /// assert_eq!(try_match("Abcd", is_4_lower), None);
 /// assert_eq!(try_match("abc", is_4_lower), None);
 /// ```
@@ -97,7 +97,7 @@ where
 
 /// always fail with [`Expected`].
 ///
-/// `expected` produces a [`Matcher`] that always fails with [mismatch](crate::result::MatchErrorKind::MisMatch) and [incomplete](crate::result::MatchErrorKind::InComplete) [`MatchError`](crate::result::MatchError) with `expected` depending on the offset.
+/// `expected` produces a [`Matcher`] that always fails with `expected`, reporting a [mismatch](crate::result::MatchErrorKind::MisMatch) [`MatchError`](crate::result::MatchError), or an [incomplete](crate::result::MatchErrorKind::InComplete) one when the input is exhausted.
 ///
 /// # example
 /// ```
@@ -116,7 +116,7 @@ pub fn expected(expected: impl Into<Expected>) -> FailExpected {
 
 /// always fail with a custom message.
 ///
-/// `fail_with` produces a [`Matcher`] that always fails with an [Other](crate::result::MatchErrorKind::Other) [`MatchError`](crate::result::MatchError) of custom `msg`.
+/// `fail_with` produces a [`Matcher`] that always fails with an [other](crate::result::MatchErrorKind::Other) [`MatchError`](crate::result::MatchError) carrying the custom message `msg`.
 ///
 /// # example
 /// ```
@@ -133,7 +133,7 @@ pub fn fail_with(msg: impl Into<LeanString>) -> FailWith {
 ///
 /// `list` takes `item` and `sep` [`Matcher`]s and produces a [`Matcher`] that matches a non-empty list of `item`s separated by `sep`.
 ///
-/// no trailing comma is allowed, and the capture is `Vec<Item::Capture>`.
+/// no trailing separator is allowed, and the capture is a `Vec<Item::Capture>`.
 ///
 /// # example
 /// ```
@@ -157,9 +157,9 @@ pub fn list<T: MatchAble + ?Sized, Item: Matcher<T>, Sep: Matcher<T>>(
 
 /// matches a delimited and separated list of `item`s.
 ///
-/// `delim_list` takes `start`, `item`, `sep` and `end_` [`Matcher`]s and produces a [`Matcher`] that matches a maybe-empty list of `item`s separated by `sep` and delimited by `start` and `end`.
+/// `delim_list` takes `start`, `item`, `sep` and `end_` [`Matcher`]s and produces a [`Matcher`] that matches a possibly empty list of `item`s separated by `sep` and delimited by `start` and `end_`.
 ///
-/// no trailing comma is allowed, and the capture is `Vec<Item::Capture>`.
+/// no trailing separator is allowed, and the capture is a `Vec<Item::Capture>`.
 ///
 /// # example
 /// ```
@@ -190,7 +190,7 @@ where
 	DelimList { start, item, sep, end_, __marker: PhantomData }
 }
 
-/// [`MatchFn`] function of specific lifetime instance.
+/// a [`MatchFn`] function for a specific lifetime instance.
 #[doc(hidden)]
 pub trait LifedMatchFn<'src, T: MatchAble + ?Sized + 'src> {
 	type Capture: 'src;
@@ -214,16 +214,16 @@ where
 
 /// matches by a function.
 ///
-/// `MatchFn` matches by a function of type `Fn(&MatchAble, &mut usize) -> IntoResult` where the return type is anything implementing [`IntoResult`], like [`bool`], [`Option<T>`] and [`Result<T, MatchError>`].
+/// `MatchFn` matches using a function of type `Fn(&MatchAble, &mut usize) -> impl IntoResult`, where the return type can be anything that implements [`IntoResult`], such as [`bool`], [`Option<T>`] and [`Result<T, MatchError>`].
 ///
-/// due to limitations in rustc, closures must specify their argument types, and can only capture owned values.
+/// due to limitations in rustc, closures must annotate their argument types and can only capture owned values.
 ///
-/// wrapped functions don't get the [`Mode`] generalization treatment; for that, it is advised to use regular [`Matcher`]s for general cases.
+/// wrapped functions do not benefit from the [`Mode`] generalization; for general-purpose cases, prefer regular [`Matcher`]s.
 ///
 /// # example
 /// ```
 /// let lt_100 = MatchFn::new(|matched: &str, off: &mut usize| {
-///    let len = matched[*off..].find(|char; char| !char.is_digit(10))
+///     let len = matched[*off..].find(|char: char| !char.is_digit(10))
 ///         .unwrap_or(matched.len() - *off);
 ///     matched[*off..*off + len].parse::<u8>().ok()
 ///         .filter(|nb| *nb < 100)
@@ -249,7 +249,7 @@ impl<T: MatchAble + ?Sized, F> MatchFn<T, F>
 where
 	F: for<'src> LifedMatchFn<'src, T>,
 {
-	/// create a new [`MatchFn`] wrapping a `fun`ction.
+	/// create a new [`MatchFn`] wrapping the function `fun`.
 	pub fn new(fun: F) -> Self {
 		Self { fun, _marker: PhantomData }
 	}
@@ -280,7 +280,7 @@ where
 	}
 }
 
-/// [general](crate::general) items [`Matcher`]s
+/// the [`Matcher`] types behind the [general](crate::general) items
 pub mod matchers {
 	use core::marker::PhantomData;
 
@@ -293,7 +293,7 @@ pub mod matchers {
 		result::{Expected, MatchError, MatchResult},
 	};
 
-	/// [`end`] [`Matcher`]
+	/// the [`end`] [`Matcher`]
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	pub struct End;
 	impl<T: MatchAble + ?Sized> Matcher<T> for End {
@@ -311,7 +311,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`pos`] [`Matcher`]
+	/// the [`pos`] [`Matcher`]
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	pub struct Pos;
 	impl<T: MatchAble + ?Sized> Matcher<T> for Pos {
@@ -325,7 +325,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`atomic`] [`Matcher`]
+	/// the [`atomic`] [`Matcher`]
 	#[derive(Debug)]
 	pub struct Atomic<T: ?Sized, U>(pub(crate) U, pub(crate) PhantomData<fn(T)>);
 	impl<T: ?Sized, U: Clone> Clone for Atomic<T, U> {
@@ -354,8 +354,157 @@ pub mod matchers {
 			self.0.expected()
 		}
 	}
+	/*
+		/// the `not` [`Matcher`]
+		#[derive(Debug)]
+		pub struct Not<T: ?Sized, U>(pub(crate) U, pub(crate) PhantomData<fn(T)>);
+		impl<T: ?Sized, U: Clone> Clone for Not<T, U> {
+			fn clone(&self) -> Self {
+				Self(self.0.clone(), self.1)
+			}
+		}
+		impl<T: ?Sized, U: Copy> Copy for Not<T, U> {}
+		impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Not<T, U> {
+			type Capture<'src>
+				= ()
+			where
+				T: 'src;
+			#[inline]
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src T, off: &mut usize,
+			) -> MatchResult<(), M> {
+				let mut forked = *off;
+				let res = self.0.do_match::<Test>(matched, &mut forked);
+				if res.is_ok() || res.is_err() && forked == matched.len() {
+					M::err(|| MatchError::expected(self.expected(), !res.is_ok(), *off))
+				} else {
+					_ = matched.skip_n::<Test>(off, 1);
+					Ok(M::wrap_success(()))
+				}
+			}
+			fn expected(&self) -> Expected {
+				match self.0.expected() {
+					Expected::None => Expected::None,
+					expected => Expected::Not(expected.to_lean_string()),
+				}
+			}
+		}
 
-	/// [`a`] [`Matcher`]
+		/// the `near` [`Matcher`]
+		#[derive(Debug)]
+		pub struct Near<T: ?Sized, U>(pub(crate) U, pub(crate) PhantomData<fn(T)>);
+		impl<T: ?Sized, U: Clone> Clone for Near<T, U> {
+			fn clone(&self) -> Self {
+				Self(self.0.clone(), self.1)
+			}
+		}
+		impl<T: ?Sized, U: Copy> Copy for Near<T, U> {}
+		impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Near<T, U> {
+			type Capture<'src>
+				= U::Capture<'src>
+			where
+				T: 'src;
+			#[inline]
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src T, off: &mut usize,
+			) -> MatchResult<U::Capture<'src>, M> {
+				self.0.do_match::<M>(matched, &mut off.clone())
+			}
+			fn expected(&self) -> Expected {
+				self.0.expected()
+			}
+		}
+
+		/// the `not_near` [`Matcher`]
+		#[derive(Debug)]
+		pub struct NotNear<T: ?Sized, U>(pub(crate) U, pub(crate) PhantomData<fn(T)>);
+		impl<T: ?Sized, U: Clone> Clone for NotNear<T, U> {
+			fn clone(&self) -> Self {
+				Self(self.0.clone(), self.1)
+			}
+		}
+		impl<T: ?Sized, U: Copy> Copy for NotNear<T, U> {}
+		impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for NotNear<T, U> {
+			type Capture<'src>
+				= ()
+			where
+				T: 'src;
+			#[inline]
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src T, off: &mut usize,
+			) -> MatchResult<(), M> {
+				let mut forked = *off;
+				let res = self.0.do_match::<Test>(matched, &mut forked);
+				if res.is_ok() || res.is_err() && forked == matched.len() {
+					M::err(|| MatchError::expected(self.expected(), !res.is_ok(), *off))
+				} else {
+					Ok(M::wrap_success(()))
+				}
+			}
+			fn expected(&self) -> Expected {
+				match self.0.expected() {
+					Expected::None => Expected::None,
+					expected => Expected::Not(expected.to_lean_string()),
+				}
+			}
+		}
+
+		/// the `rep` [`Matcher`]
+		#[derive(Debug)]
+		pub struct Rep<T: ?Sized, U> {
+			matcher: U,
+			min: usize,
+			max: usize,
+			__marker: PhantomData<fn(T)>,
+		}
+		impl<T: ?Sized, U: Clone> Clone for Rep<T, U> {
+			fn clone(&self) -> Self {
+				Self {
+					matcher: self.matcher.clone(),
+					min: self.min,
+					max: self.max,
+					__marker: PhantomData,
+				}
+			}
+		}
+		impl<T: ?Sized, U: Copy> Copy for Rep<T, U> {}
+		impl<T: MatchAble + ?Sized, U: Matcher<T>> Matcher<T> for Rep<T, U> {
+			type Capture<'src>
+				= Vec<U::Capture<'src>>
+			where
+				T: 'src;
+			#[inline]
+			fn do_match<'src, M: Mode>(
+				&self, matched: &'src T, off: &mut usize,
+			) -> MatchResult<Vec<U::Capture<'src>>, M> {
+				let mut items = Vec::new();
+				for _ in 0..self.min {
+					let item = self.matcher.do_match::<M>(matched, off)?;
+					if M::DO_CAPTURE {
+						items.push(M::unwrap_success(item));
+					}
+				}
+				for _ in self.min..=self.max {
+					let start = *off;
+					match self.matcher.do_match::<M::WithoutError>(matched, off) {
+						Ok(item) if M::DO_CAPTURE => {
+							items.push(M::WithoutError::unwrap_success(item))
+						}
+						Ok(_) => {}
+						Err(_) => {
+							*off = start;
+							break;
+						}
+					}
+				}
+				M::ok(|| items)
+			}
+			fn expected(&self) -> Expected {
+				self.matcher.expected()
+			}
+		}
+	*/
+	/// the [`a`] [`Matcher`]
 	#[derive(Debug)]
 	pub struct A<T: ?Sized, F> {
 		pub(crate) pred: F,
@@ -392,7 +541,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`an`] [`Matcher`]
+	/// the [`an`] [`Matcher`]
 	#[derive(Debug)]
 	pub struct An<T: ?Sized, F> {
 		pub(crate) pred: F,
@@ -431,7 +580,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`expected`] [`Matcher`]
+	/// the [`expected`] [`Matcher`]
 	#[derive(Debug, Clone, PartialEq)]
 	pub struct FailExpected(pub(crate) Expected);
 	impl<T: MatchAble + ?Sized> Matcher<T> for FailExpected {
@@ -447,7 +596,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`fail_with`] [`Matcher`]
+	/// the [`fail_with`] [`Matcher`]
 	#[derive(Debug, Clone, PartialEq)]
 	pub struct FailWith(pub(crate) LeanString);
 	impl<T: MatchAble + ?Sized> Matcher<T> for FailWith {
@@ -460,7 +609,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`list`] [`Matcher`]
+	/// the [`list`] [`Matcher`]
 	#[derive(Debug, PartialEq)]
 	pub struct List<T: ?Sized, Item, Sep> {
 		pub(crate) item: Item,
@@ -505,7 +654,7 @@ pub mod matchers {
 		}
 	}
 
-	/// [`delim_list`] [`Matcher`]
+	/// the [`delim_list`] [`Matcher`]
 	#[derive(Debug)]
 	pub struct DelimList<T: ?Sized, Start, Item, Sep, End> {
 		pub(crate) start: Start,
