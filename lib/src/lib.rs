@@ -109,6 +109,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::return_self_not_must_use)]
 #![allow(clippy::enum_glob_use)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc as alloc_crate;

@@ -34,11 +34,10 @@ dependencies = [
 
 [[package]]
 name = "gramex"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "gramex-macro",
  "lean_string",
- "rustc-hash",
 ]
 
 [[package]]
